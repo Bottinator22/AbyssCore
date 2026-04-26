@@ -42,42 +42,8 @@ local preciseMove = false
 local dropped = false
 local passiveTargetPos = {0,0}
 local attackFuncs
-function table.find(org, findValue)
-    for key,value in pairs(org) do
-        if value == findValue then
-            return key
-        end
-    end
-    return nil
-end
 function defaultRangeFromCore()
   return 80
-end
-function equals(o1, o2, ignore_mt)
-    if o1 == o2 then return true end
-    local o1Type = type(o1)
-    local o2Type = type(o2)
-    if o1Type ~= o2Type then return false end
-    if o1Type ~= 'table' then return false end
-    if not ignore_mt then
-        local mt1 = getmetatable(o1)
-        if mt1 and mt1.__eq then
-            --compare using built in method
-            return o1 == o2
-        end
-    end
-    local keySet = {}
-    for key1, value1 in pairs(o1) do
-        local value2 = o2[key1]
-        if value2 == nil or equals(value1, value2, ignore_mt) == false then
-            return false
-        end
-        keySet[key1] = true
-    end
-    for key2, _ in pairs(o2) do
-        if not keySet[key2] then return false end
-    end
-    return true
 end
 local completeItemConfig
 local itemBaseScale
@@ -236,12 +202,6 @@ function drawOrders(orderTypes, ownerPos)
   return {out=output,endPos=lastTargetPosition}
 end
 function stackCompatible(i)
-  --[[if i.name ~= storage.heldItem.name then
-    return false
-  end
-  if not equals(i.parameters,storage.heldItem.parameters) then
-    return false
-  end]]
   if not root.itemDescriptorsMatch(i,storage.heldItem,true) then
     return false
   end

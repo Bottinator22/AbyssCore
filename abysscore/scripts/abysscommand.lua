@@ -1,6 +1,7 @@
 require "/scripts/terra_vec2ref.lua"
 require "/scripts/terra_vec3.lua"
 require "/scripts/terra_renderutil.lua"
+require "/scripts/terra_proxy.lua"
 require "/scripts/poly.lua"
 
 -- RTS-like command interface.
@@ -47,6 +48,9 @@ command.uninit() - run when disabling command mode
 
 I usually have a single key for toggling command mode, where holding Shift (run being false) toggles pause, not holding Shift toggles command mode itself.
 ]]
+
+function orderAnim()
+end
 
 command = {}
 local selected = {}
@@ -154,6 +158,9 @@ function isSameMaster(id1, id2)
   return false
 end
 local function getLocalAnimator()
+    if not localAnimator then
+        localAnimator = terra_proxy.setupProxy("localAnimator",entity.id())
+    end
     return localAnimator or getmetatable''.localAnimator
 end
 local function orderModeName(o,m)
@@ -657,13 +664,7 @@ function command.update(args)
                         end
                     end
                     sendOrder(selected, currentOrder, target, targetType)
-                    --[[
-                    -- TODO: update
-                    local coreId = getmetatable''.coreId
-                    if coreId and world.entityExists(coreId) then
-                        world.callScriptedEntity(coreId, "orderAnim")
-                    end
-                    ]]
+                    orderAnim()
                 end
             end
             lastAlt = args.moves.altFire
@@ -695,13 +696,7 @@ function command.update(args)
                         world.callScriptedEntity(v, "clearOrders")
                     end
                     queuedOrders = {}
-                    --[[
-                    -- TODO: update
-                    local coreId = getmetatable''.coreId
-                    if coreId and world.entityExists(coreId) then
-                        world.callScriptedEntity(coreId, "orderAnim")
-                    end
-                    ]]
+                    orderAnim()
                 else
                     playersOnly = not playersOnly
                 end

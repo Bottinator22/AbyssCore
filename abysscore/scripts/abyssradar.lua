@@ -1,6 +1,7 @@
 require "/scripts/terra_vec2ref.lua"
 require "/scripts/terra_renderutil.lua"
 require "/scripts/abyssrenderutil.lua"
+require "/scripts/terra_proxy.lua"
 require "/scripts/rect.lua"
 
 local interests = {}
@@ -45,6 +46,9 @@ function radarPlayerPositions(positions)
     end
 end
 local function getLocalAnimator()
+    if not localAnimator then
+        localAnimator = terra_proxy.setupProxy("localAnimator",entity.id())
+    end
     return localAnimator or getmetatable''.localAnimator
 end
 local lastHadPlayer = os.clock()
