@@ -1,0 +1,72 @@
+{
+
+    "touchDamage" : {
+      "poly" : [ [1.0,1.0],[1.0,-1.0],[-1.0,-1.0],[-1.0,1.0] ]	,
+      "damage" : 0
+    },
+    "movementSettings" : {
+      "collisionPoly" : [ [1.0,1.0],[1.0,-1.0],[-1.0,-1.0],[-1.0,1.0] ]	
+    },
+    "scripts":[
+      "/scripts/abyssbossbar.lua"
+    ],
+    "animationCustom":{
+      "animatedParts" : {
+        "stateTypes" : {
+          "body" : {
+            "priority" : 4,
+            "default" : "idle",
+            "states" : {
+              "idle" : {}
+            }
+          },
+          "droneState": {
+            "states": {
+              "active": {
+                "properties": {
+                  "persistentSound": ""
+                }
+              }
+            }
+          }
+        },
+
+        "parts" : {
+          "body" : {
+            "properties" : {
+              "zLevel" : 10,
+              "transformationGroups" : [ "body" ],
+              "offset" : [0.0, 0.0]
+            },
+            "partStates": null
+          },
+          "bodyFullbright": null
+        }
+      },
+
+      "transformationGroups" : {
+        "body" : { "interpolated" : true },
+        "flip": {"interpolated": false},
+        "rotation": {"interpolated": false}
+      },
+      "effects" : {
+      },
+      "particleEmitters" : null,
+      "lights" : {
+      },
+
+      "sounds" : {
+        "fire" : []
+      }
+    },
+    "statusSettings" : {
+      "stats" : {
+        "invulnerable" : {
+          "baseValue" : 1
+        },
+        "statusImmunity" : {
+          "baseValue" : 1
+        }
+      }
+    }
+} 

@@ -1,0 +1,221 @@
+{
+    "touchDamage" : {
+      "poly" : [ [0.75, 1.0], [1.0, 0.75], [1.0, -0.75], [0.75, -1.0], [-0.75, -1.0], [-1.0, -0.75], [-1.0, 0.75], [-0.75, 1.0] ]	,
+      "damage" : 2,
+
+      "teamType" : "enemy",
+      "damageType": "IgnoresDef",
+      "damageSourceKind" : "impact",
+      "knockback" : 40,
+      "statusEffects" : [ ]
+    },
+
+    "metaBoundBox" : [-4, -4, 4, 4],
+    
+    "movementSettings" : {
+      "collisionEnabled": false,
+      "collisionPoly" : [ [0.75, 1.0], [1.0, 0.75], [1.0, -0.75], [0.75, -1.0], [-0.75, -1.0], [-1.0, -0.75], [-1.0, 0.75], [-0.75, 1.0] ]	,
+
+      "mass" : 2.0,
+      "walkSpeed" : 35,
+      "runSpeed" : 35,
+      
+      "speedLimit":8.988466e+307,
+
+      "bounceFactor" : 0,
+      "groundFriction" : 10,
+      "gravityEnabled" : false,
+
+      "airFriction" : 0,
+      "liquidFriction": 0,
+      "liquidBuoyancy": 0.0
+    },
+    
+    "initialScriptDelta": 1,
+    "clientEntityMode": "clientMasterAllowed",
+    "facingMode": "transformation",
+    "level": 6,
+    
+    "bodyMaterialKind" : "organic",
+
+    "knockoutTime" : 0,
+    "deathParticles" : "deathPoof",
+    "knockoutEffect" : "",
+    
+    "stunDamageSuppression" : 0.2,
+
+    "statusSettings" : {
+      "statusProperties" : {
+        "targetMaterialKind" : "organic"
+      },
+
+      "appliesEnvironmentStatusEffects" : false,
+      "appliesWeatherStatusEffects" : false,
+      "minimumLiquidStatusEffectPercentage" : 0.1,
+
+      "primaryScriptSources" : [
+        "/scripts/abysssegment_primary.lua"
+      ],
+      "primaryScriptDelta" : 1,
+
+      "stats" : {
+        "grit" : {
+          "baseValue" : 1
+        },
+        "knockbackStunTime" : {
+          "baseValue" : 0.0
+        },
+        "knockbackThreshold" : {
+          "baseValue" : 0
+        },
+        "wetImmunity" : {
+          "baseValue" : 1.0
+        },
+        "waterImmunity" : {
+          "baseValue" : 1.0
+        },
+        "lavaImmunity" : {
+          "baseValue" : 1.0
+        },
+        "poisonStatusImmunity" : {
+          "baseValue" : 1.0
+        },
+        "fireStatusImmunity" : {
+          "baseValue" : 1.0
+        },
+        "iceStatusImmunity" : {
+          "baseValue" : 1.0
+        },
+        "electricStatusImmunity" : {
+          "baseValue" : 1.0
+        },
+        "despawnImmunity" : {
+          "baseValue" : 1.0
+        },
+        "maxHealth" : {
+          "baseValue" : 1000
+        },
+        "protection" : {
+          "baseValue" : 0.0
+        },
+        "healthRegen" : {
+          "baseValue" : 0.5
+        },
+        "powerMultiplier" : {
+          "baseValue" : 1.0
+        }
+      },
+
+      "resources" : {
+        "stunned" : {
+          "deltaValue" : -1.0,
+          "initialValue" : 0.0
+        },
+        "health" : {
+          "maxStat" : "maxHealth",
+          "deltaStat" : "healthRegen",
+          "defaultPercentage" : 100
+        }
+      }
+    },
+    "animationCustom":{
+      "globalTagDefaults" : {
+          "shieldDirectives" : ""
+      },
+      "animatedParts" : {
+        "stateTypes" : {
+          "body" : {
+            "priority" : 4,
+            "default" : "idle",
+            "states" : {
+              "idle" : {
+                "frames" : 1,
+                "cycle" : 1,
+                "mode" : "loop"
+              }
+            }
+          },
+          "droneState": {
+            "default" : "none",
+            "states": {
+              "none": {},
+              "active": {
+                "properties": {
+                  "persistentSound": ""
+                }
+              }
+            }
+          },
+          "shield" : {
+              "priority" : 1,
+              "default" : "off",
+              "states" : {
+                  "on" : {},
+                  "off": {}
+              }
+          }
+        },
+
+        "parts" : {
+          "body" : {
+            "properties" : {
+              "zLevel" : 10,
+              "transformationGroups" : [ "body" ],
+              "offset" : [0.0, 0.0]
+            },
+            "partStates": {
+            }
+          },
+          "bodyFullbright": {
+            "properties" : {
+              "zLevel" : 0,
+              "transformationGroups" : [ "body" ],
+              "offset" : [0.0, 0.0]
+            },
+            "partStates": {
+              "body": {
+                "idle": {
+                  "properties": {
+                    "image" : null
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+
+      "transformationGroups" : {
+        "body" : { "interpolated" : true },
+        "facing" : { "interpolated" : false }
+      },
+
+      "effects" : {
+        "blink" : {
+          "type" : "flash",
+          "time" : 0,
+          "directives" : "fade=ffffff;0.5"
+        }
+      },
+
+      "particleEmitters" : {
+        "deathPoof" : {
+          "offsetRegion" : [-3.0, -3.0, 3.0, 3.0],
+          "burstCount" : 1,
+          "particles" : [
+            { "particle" : "monstersplosion" },
+            { "particle" : "deathfizz1left" },
+            { "particle" : "deathfizz1right" }
+          ]
+        }
+      },
+      "lights" : {
+      },
+
+      "sounds" : {
+        "fire" : [],
+        "activateShield": ["/sfx/melee/staff_aura_activate.ogg"],
+        "breakShield": ["/sfx/melee/shield_break_ice.ogg"]
+      }
+    }
+} 

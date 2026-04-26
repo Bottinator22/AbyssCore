@@ -1,0 +1,14 @@
+{
+  "name" : "abyssbasictech",
+  "type" : "body",
+
+  "scripts" : ["/scripts/abyssbasictech/tech.lua"],
+  "animator" : "/stats/effects/glow/glow.animation",
+
+  "description" : "A simple tech that makes use of Abyss Core features. Not designed for normal gameplay.",
+  "shortDescription" : "Abyss Simple",
+  "rarity" : "Legendary",
+  "icon" : "/tech/airdash.png",
+
+  "chipCost" : 0
+}

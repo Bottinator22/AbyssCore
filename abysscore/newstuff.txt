@@ -1,0 +1,9 @@
+Basic tech
+    - version that doesn't use the special keys so you can combine it with other things
+    - dedicated radar bind, for the special key-less version
+    - /lay command, like /sit but in lay pose (note: reuses sit mode code, works inconsistently when combined with /sit)
+    - /duck command, toggles holding duck for you
+    - /emote command, holds an emote for you
+    - /rot command, sets rotation directly to a number
+    - /antinude command, toggles nudity immunity
+    - /setGlow command, sets a glow

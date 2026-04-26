@@ -1,0 +1,14 @@
+{
+  "author" : "Bott",
+  "description" : "Various utilities that I created for Abyssal Response but ended up using in a lot more things.",
+  "friendlyName" : "^#7f0000;Abyss Core^reset;",
+  "link" : "",
+  "name" : "abysscore",
+  "steamContentId" : "",
+  "tags" : "Cheats and God Items",
+  "version" : "1",
+  "requires": ["terraliblite"],
+  "scripts" : {
+    "postLoad" : ["/scripts/abyssload.lua"]
+  }
+}

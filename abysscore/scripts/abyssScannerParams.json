@@ -1,0 +1,219 @@
+{
+    "scale": 0,
+    "movementSettings": {
+        "gravityEnabled": false,
+        "collisionEnabled": false
+    },
+    "initialScriptDelta": 1,
+    "knockoutTime": 0,
+    "scriptDelta": 1,
+    "damageTeamType": "ghostly",
+    "statusSettings": {
+        "primaryScriptSources" : [
+            "/scripts/vec2.lua"
+        ],
+        "primaryScriptDelta" : 0,
+        "stats": {
+            "iceStatusImmunity": {
+                "baseValue": 1
+            },
+            "fireStatusImmunity": {
+                "baseValue": 1
+            },
+            "healthRegen": {
+                "baseValue": 0
+            },
+            "maxHealth": {
+                "baseValue": 1
+            },
+            "lavaImmunity": {
+                "baseValue": 1
+            },
+            "electricStatusImmunity": {
+                "baseValue": 1
+            },
+            "invulnerable": {
+                "baseValue": 1
+            },
+            "poisonStatusImmunity": {
+                "baseValue": 1
+            },
+            "grit": {
+                "baseValue": 1
+            }
+        }
+    },
+    "behavior": {
+        "root": {
+            "type": "composite",
+            "name": "sequence",
+            "children": [
+                {
+                    "parameters": {
+                        "entity": {
+                            "key": "self"
+                        },
+                        "message": {
+                            "value": "despawn"
+                        }
+                    },
+                    "type": "action",
+                    "name": "sendEntityMessage"
+                },
+                {
+                    "output": {
+                        "list": "ownerList"
+                    },
+                    "type": "action",
+                    "name": "listClear"
+                },
+                {
+                    "parameters": {
+                        "path": {
+                            "value": "ownerId"
+                        }
+                    },
+                    "output": {
+                        "number": "ownerIdN"
+                    },
+                    "type": "action",
+                    "name": "entityConfigParameter"
+                },
+                {
+                    "parameters": {
+                        "list": {
+                            "key": "ownerList"
+                        },
+                        "number": {
+                            "key": "ownerIdN"
+                        }
+                    },
+                    "output": {
+                        "list": "ownerList"
+                    },
+                    "type": "action",
+                    "name": "listPush"
+                },
+                {
+                    "parameters": {
+                        "list": {
+                            "key": "ownerList"
+                        }
+                    },
+                    "output": {
+                        "list": "ownerList",
+                        "entity": "ownerId"
+                    },
+                    "type": "action",
+                    "name": "listPop"
+                },
+                {
+                    "output": {
+                        "list": "positionList"
+                    },
+                    "type": "action",
+                    "name": "listClear"
+                },
+                {
+                    "output": {
+                        "list": "playerList"
+                    },
+                    "type": "action",
+                    "name": "playersInWorld"
+                },
+                {
+                    "parameters": {
+                        "list": {
+                            "key": "playerList"
+                        },
+                        "type": {
+                            "value": "entity"
+                        }
+                    },
+                    "type": "decorator",
+                    "child": {
+                        "type": "composite",
+                        "name": "sequence",
+                        "children": [
+                            {
+                                "parameters": {
+                                    "entity": {
+                                        "key": "eachItem"
+                                    }
+                                },
+                                "output": {
+                                    "position": "position"
+                                },
+                                "type": "action",
+                                "name": "entityPosition"
+                            },
+                            {
+                                "parameters": {
+                                    "list": {
+                                        "key": "positionList"
+                                    },
+                                    "position": {
+                                        "key": "position"
+                                    }
+                                },
+                                "output": {
+                                    "list": "positionList"
+                                },
+                                "type": "action",
+                                "name": "listPush"
+                            }
+                        ]
+                    },
+                    "name": "each"
+                },
+                {
+                    "parameters": {
+                        "entity": {
+                            "key": "ownerId"
+                        },
+                        "message": {
+                            "value": "abyssPlayerPositions"
+                        },
+                        "arguments": {
+                            "key": "positionList"
+                        }
+                    },
+                    "type": "action",
+                    "name": "sendEntityMessage"
+                },
+                {
+                    "parameters": {
+                        "resource": {
+                            "value": "health"
+                        },
+                        "percentage": {
+                            "value": 0
+                        }
+                    },
+                    "type": "action",
+                    "name": "setResourcePercentage"
+                }
+            ]
+        },
+        "parameters": {},
+        "scripts": [
+            "/scripts/actions/entity.lua",
+            "/scripts/actions/world.lua",
+            "/scripts/behavior.lua",
+            "/scripts/actions/status.lua",
+            "/scripts/actions/math.lua",
+            "/scripts/actions/query.lua",
+            "/scripts/actions/notification.lua",
+            "/scripts/behavior/bdata.lua",
+            "/scripts/actions/projectiles.lua",
+            "/scripts/actions/position.lua"
+        ],
+        "name": "playerdetector"
+    },
+    "behaviorUpdateDelta": 1,
+    "animationCustom": {
+        "sounds": {
+            "deathPuff": []
+        }
+    }
+} 

@@ -1,0 +1,29 @@
+{
+  "abysscore": {
+    "groups": {
+      "actions": { "name": "Actions" }
+    },
+    "name": "Abyss Core",
+    "binds": {
+      "blink": {
+        "default": [],
+        "group": "actions",
+        "name": "Blink/Teleport",
+        "tags": ["blink"]
+      },
+      "toggleCommand": {
+        "default": [{
+          "type" : "key",
+          "value" : "o"
+        }],
+        "group": "actions",
+        "name": "Toggle Command Mode"
+      },
+      "toggleRadar": {
+        "default": [],
+        "group": "actions",
+        "name": "Cycle Radar Mode"
+      }
+    }
+  }
+} 
