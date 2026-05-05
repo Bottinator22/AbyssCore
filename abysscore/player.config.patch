@@ -1,0 +1,3 @@
+[
+{ "op" : "add", "path" : "/genericScriptContexts/abyssGeneric", "value" : "/scripts/abyssgeneric.lua" }
+]

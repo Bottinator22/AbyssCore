@@ -53,6 +53,10 @@ function init()
         if not l then return "nuh uh" end
         return parentState
     end)
+    message.setHandler("abyss_updateFlip",function(_,l)
+        if not l then return "nuh uh" end
+        updateConfigAndFlip()
+    end)
     message.setHandler("/antinude",function(_,l)
         if not l then return "no" end
         if #status.getPersistentEffects("noNude") > 0 then
@@ -142,18 +146,91 @@ function init()
             end
             table.insert(split, n)
         end
-        if #split < 3 then
-            player.setProperty("abyss_lightColour",{0,0,0})
-            animator.setLightColor("glow",{0,0,0})
-            return "Reset glow."
+        local k = player.getProperty("abyss_configKey")
+        if k then
+            local cfg = player.getProperty(k) or {}
+            if #split < 3 then
+                cfg.lightColour = nil
+                animator.setLightColor("glow",player.getProperty("abyss_lightColour",{0,0,0}))
+                return "Reset glow. (Using base light colour as default!)"
+            end
+            cfg.lightColour = split
+            player.setProperty(k,cfg)
+            animator.setLightColor("glow",split)
+            return "Set glow."
+        else
+            if #split < 3 then
+                player.setProperty("abyss_lightColour",{0,0,0})
+                animator.setLightColor("glow",{0,0,0})
+                return "Reset glow."
+            end
+            player.setProperty("abyss_lightColour",split)
+            animator.setLightColor("glow",split)
+            return "Set glow."
         end
-        player.setProperty("abyss_lightColour",split)
-        animator.setLightColor("glow",split)
-        return "Set glow."
+    end)
+    message.setHandler("/configKey", function(_,l,c) 
+        if not l then
+            return "Unauthorized"
+        end
+        if player.getProperty("abyss_configKey") and player.getProperty("abyss_origIdentity") then
+            player.setHumanoidIdentity(sb.jsonMerge(player.humanoidIdentity(),player.getProperty("abyss_origIdentity")))
+        end
+        if #c <= 0 then
+            player.setProperty("abyss_configKey",nil)
+            animator.setLightColor("glow",player.getProperty("abyss_lightColour",{0,0,0}))
+            return "Reset config key."
+        end
+        if not player.getProperty("abyss_configKey") then
+            player.setProperty("abyss_origIdentity",player.humanoidIdentity())
+        end
+        player.setProperty("abyss_configKey",c)
+        animator.setLightColor("glow",player.getProperty(c,{}).lightColour or player.getProperty("abyss_lightColour",{0,0,0}))
+        local newName = player.getProperty(c,{}).name
+        if newName then
+            player.setName(newName)
+        end
+        if player.getProperty(c) then
+            return string.format("Set config key to '%s'.",c)
+        else
+            return string.format("Set config key to '%s'. Nothing defined at this key.",c)
+        end
+    end)
+    message.setHandler("/abyssIdentity", function(_,l,c) 
+        if not l then
+            return "Unauthorized"
+        end
+        if true then
+            return "TODO: I need to make this."
+        end
+        local k = player.getProperty("abyss_configKey")
+        if not k then
+            return "No config key defined. Define one first."
+        end
+        local dirPair = player.getProperty(k) or {}
+    end)
+    message.setHandler("/abyssFlipIdentity", function(_,l,c) 
+        if not l then
+            return "Unauthorized"
+        end
+        if true then
+            return "TODO: I need to make this."
+        end
+        local k = player.getProperty("abyss_configKey")
+        if not k then
+            return "No config key defined. Define one first."
+        end
+        local dirPair = player.getProperty(k) or {}
     end)
     -- TODO: clothing 'covered region' checks, to dynamically dim the light based on visible clothing
     animator.setParticleEmitterActive("sparkles",false)
-    animator.setLightColor("glow",player.getProperty("abyss_lightColour",{0,0,0}))
+    local k = player.getProperty("abyss_configKey")
+    if k then
+        local cfg = player.getProperty(k,{})
+        animator.setLightColor("glow",cfg.lightColour or player.getProperty("abyss_lightColour",{0,0,0}))
+    else
+        animator.setLightColor("glow",player.getProperty("abyss_lightColour",{0,0,0}))
+    end
     ignoreSpecial = config.getParameter("ignoreSpecial",false)
     if not player then
         player = terra_proxy.setupProxy("player",entity.id())
@@ -164,6 +241,29 @@ function init()
     })
     radarInit()
     mcontroller.setAutoClearControls(true)
+end
+
+local lastFacing
+local lastConfigKey
+function updateConfigAndFlip()
+    local configKey = player.getProperty("abyss_configKey")
+    local facing = (player.facingDirection or mcontroller.facingDirection)()
+    if configKey and (configKey ~= lastConfigKey or lastFacing ~= facing) then
+        local cfg = player.getProperty(configKey)
+        local identityOverride = nil
+        if cfg then
+            if facing < 0 then
+                identityOverride = cfg.flip
+            else
+                identityOverride = cfg.base
+            end
+        end
+        if identityOverride then
+            player.setHumanoidIdentity(sb.jsonMerge(player.humanoidIdentity(),identityOverride))
+        end
+    end
+    lastConfigKey = configKey
+    lastFacing = facing
 end
 local lastSpecial3 = false
 local lastTele = false
@@ -187,6 +287,7 @@ function update(args)
     if heldEmote then
         player.emote(heldEmote)
     end
+    updateConfigAndFlip()
     if input then
         if input.bindHeld("abysscore","blink") and not lastTele then
             mcontroller.setPosition(tech.aimPosition())

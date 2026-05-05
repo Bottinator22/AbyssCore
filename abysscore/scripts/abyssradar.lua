@@ -803,7 +803,7 @@ function radar(hidden,disMult)
                     text = text..string.format("\nMessage: %s", messageType)
                     if messageType == "playAltMusic" then
                         local musicStr = ""
-                        local messageArgs = e:getParameter(other,"messageArgs")
+                        local messageArgs = e:getParameter("messageArgs")
                         if messageArgs[1] then
                             for k,v in next, messageArgs[1] do
                                 if k ~= 1 then
