@@ -68,8 +68,21 @@ function update(dt,fireMode,shifting,moves)
     if not state then
         -- determine it otherwise
         state = "idle"
-        if not mcontroller.groundMovement() then
-            if mcontroller.yVelocity() > 0 then
+        if mcontroller.anchorState() then
+            state = "sit"
+        elseif mcontroller.zeroG() then
+            if mcontroller.flying() then
+                state = "swim"
+            else
+                state = "swimIdle"
+            end
+        elseif not mcontroller.groundMovement() then
+            if mcontroller.liquidMovement() then
+                state = "swimIdle"
+                if mcontroller.jumping() then
+                    state = "swim"
+                end
+            elseif mcontroller.yVelocity() > 0 then
                 state = "jump"
             elseif mcontroller.yVelocity() < -4 then
                 state = "fall"

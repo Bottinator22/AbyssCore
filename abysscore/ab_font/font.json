@@ -56,5 +56,8 @@
     "\\":"/ab_font/backslash.png",
     "<":"/ab_font/leftarrowbracket.png",
     ">":"/ab_font/rightarrowbracket.png",
-    "+":"/ab_font/plus.png"
+    "+":"/ab_font/plus.png",
+    "🐟":"/ab_font/fish.png",
+    "!":"/ab_font/exclamation.png",
+    "?":"/ab_font/question.png"
 } 

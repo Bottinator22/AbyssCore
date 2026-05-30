@@ -146,7 +146,7 @@ function builder_set(x,y, layer, mat, op)
   builder_minPos[2] = math.min(builder_minPos[2], y)
   builder_maxPos[1] = math.max(builder_maxPos[1], x+1)
   builder_maxPos[2] = math.max(builder_maxPos[2], y+1)
-  builder_blocks[key] = {pos={x,y,layer},mat=mat,active=false,hue=(op or dOptions).hue or nil,collisionMode=(op or dOptions).coll or nil}
+  builder_blocks[key] = {pos={x,y,layer},mat=mat,active=false,hue=(op or dOptions).hue or nil,collisionMode=(op or dOptions).coll or nil,colour=(op or dOptions).colour or nil}
 end
 function builder_order(from, to, layer, mat)
   for x=from[1],to[1]-1,1 do
@@ -155,21 +155,36 @@ function builder_order(from, to, layer, mat)
     end
   end
 end
+local placeholderProps = {}
+local placeholderPropRow = {}
+setmetatable(placeholderPropRow,{__index=function()
+    return nil
+end})
+setmetatable(placeholderProps,{__index=function()
+    return placeholderPropRow
+end})
 -- expects schematic to be decompressed already
 -- same format as Support Drone schematic
 function builder_schematic(schem, pos)
+  local fgColours = schem.fgColours or placeholderProps
+  local bgColours = schem.bgColours or placeholderProps
+  local fgHues = schem.fgHues or placeholderProps
+  local bgHues = schem.bgHues or placeholderProps
+  local fgCollisions = schem.fgCollisions or placeholderProps
+  local bgCollisions = schem.bgCollisions or placeholderProps
   local size = schem.size
   for y,r in next,schem.background do
     for x,v in next,r do
-      builder_set(pos[1]+x-1,pos[2]-y+1,"background",v)
+      builder_set(pos[1]+x-1,pos[2]-y+1,"background",v,{colour=bgColours[y][x],hue=bgHues[y][x],coll=bgCollisions[y][x]})
     end
   end
   for y,r in next,schem.foreground do
     for x,v in next,r do
-      builder_set(pos[1]+x-1,pos[2]-y+1,"foreground",v)
+      builder_set(pos[1]+x-1,pos[2]-y+1,"foreground",v,{colour=fgColours[y][x],hue=fgHues[y][x],coll=fgCollisions[y][x]})
     end
   end
   -- todo: objects
+  -- todo: wires (oSB)
 end
 local otherLayer = {
   foreground="background",
@@ -347,7 +362,8 @@ local analyzerReadStats = {
 }
 local playerId
 local function getNameVis()
-  return world.sendEntityMessage(playerId,"abyssNameVis"):result()
+  local v = world.sendEntityMessage(playerId,"abyssNameVis"):result()
+  return (v == nil) or v 
 end
 -- Engine callback - called on initialization of entity
 function init()
@@ -620,6 +636,9 @@ function init()
                         v.current = nil
                       end
                     else
+                      if v.current.colour then
+                        world.setMaterialColor(v.current.pos,v.current.pos[3],v.current.colour)
+                      end
                       v.current.active = false
                       v.current = nil
                     end
@@ -632,6 +651,9 @@ function init()
                   end
                 else
                   animator.setAnimationState(v.part,"off")
+                  if v.current.colour then
+                    world.setMaterialColor(v.current.pos,v.current.pos[3],v.current.colour)
+                  end
                   v.current.active = false
                   v.current = nil
                 end

@@ -1,0 +1,88 @@
+{
+    
+    "animation" : "/monsters/mechdrone/multidrone/mechmultidrone.animation",
+    
+    "movementSettings" : {
+      "collisionPoly": [
+        [0,0]
+      ],
+      "collisionEnabled": false,
+
+      "mass" : 2.0,
+
+      "bounceFactor" : 0,
+      "groundFriction" : 10,
+      "gravityEnabled" : false,
+
+      "airFriction" : 0,
+      "liquidFriction": 0,
+      "liquidBuoyancy": 0.0
+    },
+    "physicsCollisions": {
+      "platform":{
+        "collision": [
+          [1,1],[1,-1],[-1,-1],[-1,1]
+        ],
+        "collisionKind": "platform",
+        "attachToPart": "body",
+        "enabled": true
+      },
+      "platform_duck":{
+        "collision": [
+          [1,1],[1,-1],[-1,-1],[-1,1]
+        ],
+        "collisionKind": "platform",
+        "attachToPart": "body",
+        "enabled": false
+      }
+    },
+    
+    "boundBox" : [-32, -32, 32, 32],
+    
+    "script": "/scripts/abyssheadplatform/abyssheadplatform.lua",
+    "scriptDelta": 1,
+    "clientEntityMode": "clientMasterAllowed",
+    
+    "animationCustom":{
+      "globalTagDefaults" : {
+      },
+      "animatedParts" : {
+        "stateTypes" : {
+          "droneState": {
+            "default" : "none",
+            "states": {
+              "active": {
+                "properties": {
+                  "persistentSound": ""
+                }
+              },
+              "none":{}
+            }
+          }
+        },
+        "parts" : {
+          "body" : {
+            "properties" : {
+              "zLevel" : 10,
+              "transformationGroups" : [ "body" ],
+              "offset" : [0.0, 0.0]
+            }
+          }
+        }
+      },
+
+      "transformationGroups" : {
+        "body" : { "interpolated" : true },
+        "flip": {"interpolated": false}
+      },
+      "effects" : {
+      },
+      "particleEmitters" : {
+      },
+      "lights" : {
+      },
+      "sounds" : {
+      }
+    },
+    "loungePositions": null
+} 

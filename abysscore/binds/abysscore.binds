@@ -11,6 +11,12 @@
         "name": "Blink/Teleport",
         "tags": ["blink"]
       },
+      "face": {
+        "default": [],
+        "group": "actions",
+        "name": "Face Cursor",
+        "tags": ["facing"]
+      },
       "toggleCommand": {
         "default": [{
           "type" : "key",

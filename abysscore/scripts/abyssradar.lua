@@ -3,6 +3,7 @@ require "/scripts/terra_renderutil.lua"
 require "/scripts/abyssrenderutil.lua"
 require "/scripts/terra_proxy.lua"
 require "/scripts/rect.lua"
+require "/scripts/poly.lua"
 
 local interests = {}
 local font
@@ -117,7 +118,7 @@ function radarInit()
     end
     for k,v in next, root.assetJson("/scripts/abyssUniqueObjects.json") do
         if not commonUniqueEntities[k] then
-            commonUniqueEntities[k] = {name=v,colour=newUniqueEColour()}
+            commonUniqueEntities[k] = {name=v,colour=newUniqueEColour(),uuid=k}
         end
     end
     initialized = true
@@ -170,9 +171,10 @@ function radarInit()
             return "Interest name cannot have spaces."
         end
         local exists = not not interests[c]
+        local old = interests[c]
         local interest = mcontroller.position()
         interest[3] = player.worldId()
-        interest[4] = {
+        interest[4] = old and old[4] or {
             colour=newInterestColour()
         }
         interests[c] = interest
@@ -242,6 +244,9 @@ function radarInit()
         end
         if split[2] then
             local n = tonumber(split[2])
+            if not n then
+                return "Could not parse radius."
+            end
             interest[4].radius = n
             saveInterests()
             return string.format("Set interest %s radius to %.1f.",i,n)
@@ -249,6 +254,39 @@ function radarInit()
             interest[4].radius = nil
             saveInterests()
             return string.format("Reset interest %s radius.",i)
+        end
+    end)
+    message.setHandler("/radarInterestBox",function(_,l,c)
+        if not l then return "no" end
+        local split = {}
+        for v in string.gmatch(c,"([^ ]+)") do
+            table.insert(split, v)
+        end
+        if #split < 1 or #c == 0 or (#split >= 2 and #split < 5) then
+            return "Usage: /radarInterestBox <interest> [<x1> <y1> <x2> <y2>]"
+        end
+        if #split > 5 then
+            return "Interest name cannot have spaces."
+        end
+        local i = split[1]
+        local interest = interests[i]
+        if not interest then
+            return "No interest detected with that name."
+        end
+        if split[2] then
+            local n = {tonumber(split[2]),tonumber(split[3]),tonumber(split[4]),tonumber(split[5])}
+            for k,v in next, n do
+                if not v then
+                    return string.format("Could not parse rect component %d.",k)
+                end
+            end
+            interest[4].box = n
+            saveInterests()
+            return string.format("Set interest %s to use box [%.1f,%.1f,%.1f,%.1f].",i,n[1],n[2],n[3],n[4])
+        else
+            interest[4].box = nil
+            saveInterests()
+            return string.format("Removed box of interest %s.",i)
         end
     end)
     message.setHandler("/radarListInterests",function(_,l)
@@ -394,19 +432,7 @@ local function updatePlayer(v)
     dat.id = v
     dat.worldId = player.worldId()
     dat.lastChecked = world.time()
-    storage.radarPlayerPositions[k] = dat
-end
-local function updateUniqueEntity(v)
-    local k = entityPosKey(v)
-    local dat = storage.radarPlayerPositions[k] or {id=v,name=nil,lastChecked=0,uuid=nil,exists=true,old=false,pos={0,0},worldId=nil,type=nil}
-    dat.pos = world.entityPosition(v)
-    dat.type = world.entityType(v)
-    dat.uuid = world.entityUniqueId(v)
-    dat.enemy = dat.type ~= "vehicle" and entity.isValidTarget(v)
-    dat.old = false
-    dat.id = v
-    dat.worldId = player.worldId()
-    dat.lastChecked = world.time()
+    dat.lastSeen = world.time()
     storage.radarPlayerPositions[k] = dat
 end
 local namelessTypes = {
@@ -441,12 +467,27 @@ local actorTypes = {
     npc=true,
     monster=true
 }
+local collisionTypes = {
+    -- all PhysicsEntity types, excluding players/npcs/monsters since they can't have moving collisions
+    --player=true,
+    --npc=true,
+    --monster=true,
+    vehicle=true,
+    projectile=true,
+    object=true
+}
 local interestNoteDistance = 5
 function interestCheck(p)
     for k,v in next, interests do
         if v[3] == player.worldId() then
-            if world.magnitude(p,v) < (v[4].radius or interestNoteDistance) then
-                return true
+            if v[4].box then
+                if rect.contains(rect.translate(v[4].box,v),p) then
+                    return true
+                end
+            else
+                if world.magnitude(p,v) < (v[4].radius or interestNoteDistance) then
+                    return true
+                end
             end
         end
     end
@@ -493,6 +534,30 @@ function radar(hidden,disMult)
     if not localAnimator then
         return
     end
+    local function drawBox(r,c,t,layer)
+        local ls = {
+            generateLineDrawable({r[1],r[2]},{r[1],r[4]}),
+            generateLineDrawable({r[1],r[4]},{r[3],r[4]}),
+            generateLineDrawable({r[3],r[4]},{r[3],r[2]}),
+            generateLineDrawable({r[3],r[2]},{r[1],r[2]})
+        }
+        for _,l in next, ls do
+            l.color = c
+            l.width = t
+            l.fullbright = true
+            localAnimator.addDrawable(l,layer)
+        end
+    end
+    local function strokePoly(p,c,t,layer)
+        for k,v in next, p do
+            local n = p[k + 1] or p[1]
+            local l = generateLineDrawable(v,n)
+            l.color = c
+            l.width = t
+            l.fullbright = true
+            localAnimator.addDrawable(l,layer)
+        end
+    end
     local function lineTowardsPos(p, c, d)
         if hidden then return end
         local angle = vec2.angle(world.distance(p, mcontroller.position()))
@@ -509,7 +574,7 @@ function radar(hidden,disMult)
     end
     local raim = world.distance(tech.aimPosition(),mcontroller.position())
     local closestIndicated
-    local function indicatePosition(p, c, d, o, priority)
+    local function indicatePosition(p, c, d, o, ptype, priority)
         if visibleLevel < 1 then
             return
         end
@@ -534,7 +599,8 @@ function radar(hidden,disMult)
                 size=d,
                 pos=p,
                 relPos=rel,
-                other=o
+                other=o,
+                othertype=ptype
             }
         end
         local drawable = {
@@ -548,12 +614,16 @@ function radar(hidden,disMult)
         localAnimator.addDrawable(drawable, "Overlay+32002")
     end
     local function indicateEntity(e, c, priority)
-        return indicatePosition(world.entityPosition(e),c,1,e,priority)
+        return indicatePosition(world.entityPosition(e),c,1,e,"entity",priority or 0)
     end
     local function indicAlpha(c)
         return {c[1],c[2],c[3],(c[4] or 255)/2}
     end
-    indicatePosition(mcontroller.position(),{255,255,255,127},1,"\nSelf")
+    if verbose then
+        indicateEntity(entity.id(),{255,255,255,127},0.5)
+    else
+        indicatePosition(mcontroller.position(),{255,255,255,127},1,"\nSelf","generic",0.5)
+    end
     for k,v in next, commonUniqueEntities do
         if not v.pos then
             if not v.promise then
@@ -568,13 +638,13 @@ function radar(hidden,disMult)
             end
         else
             lineTowardsPos(v.pos,v.colour,2)
-            indicatePosition(v.pos,indicAlpha(v.colour),2,"\n"..v.name)
+            indicatePosition(v.pos,indicAlpha(v.colour),2,v,"commonUniqueEntity")
         end
     end
     for k,v in next, interests do
         if v[3] == player.worldId() then
             lineTowardsPos(v,v[4].colour,2)
-            indicatePosition(v,indicAlpha(v[4].colour),2,"\n"..k)
+            indicatePosition(v,indicAlpha(v[4].colour),2,k,"interest")
         end
     end
     
@@ -593,6 +663,7 @@ function radar(hidden,disMult)
                         v.exists = true
                         v.worldId = player.worldId()
                         v.old = false
+                        v.lastSeen = world.time()
                     elseif v.worldId == player.worldId() then
                         v.exists = false
                     end
@@ -634,7 +705,7 @@ function radar(hidden,disMult)
             end
         end
         lineTowardsPos(v.pos, c, 1)
-        indicatePosition(v.pos,indicAlpha(c),1,v,priority)
+        indicatePosition(v.pos,indicAlpha(c),1,v,"player",priority)
     end
     local types = {"npc","monster", "vehicle","stagehand","plantDrop"}
     if not world.players then
@@ -756,7 +827,7 @@ function radar(hidden,disMult)
                 crgb = renderutil.toRGB(c)
             end
             lineTowardsPos(v, crgb, 1.5)
-            indicatePosition(v,indicAlpha(crgb),size,nil,0.5)
+            indicatePosition(v,indicAlpha(crgb),size,nil,"blip",0.5)
         end
         v[3] = v[3] - pingTimescale
         if v[3] > 0 then
@@ -780,11 +851,17 @@ function radar(hidden,disMult)
     end
     if visibleLevel >= 1 and closestIndicated and closestIndicated.dis < 3 then
         local other = closestIndicated.other
-        local text = string.format("%.1f",world.magnitude(closestIndicated.pos,mcontroller.position()))
-        if type(other) == "number" then
+        local othertype = closestIndicated.othertype or "none"
+        local fstr = "%.1f"
+        if verbose then
+            fstr = "%.6f"
+        end
+        local text = string.format(fstr,world.magnitude(closestIndicated.pos,mcontroller.position()))
+        if othertype == "entity" and world.entity then
             -- likely an entity, show info about entity
             local e = world.entity(other)
             local etype = e:type()
+            local rel = world.distance(e:position(), mcontroller.position())
             text = text..string.format("\nType: %s", etype)
             if not namelessTypes[etype] then
                 text = text..string.format("\nName: %s", noDirectives(e:name()))
@@ -819,6 +896,15 @@ function radar(hidden,disMult)
                             musicStr = "nil"
                         end
                         text = text..string.format("\nMusic: %s",musicStr)
+                    elseif messageType == "warp" then
+                        local targetStr = ""
+                        local messageArgs = e:getParameter("messageArgs")
+                        if messageArgs[1] then
+                            targetStr = messageArgs[1]
+                        else
+                            targetStr = "nil"
+                        end
+                        text = text..string.format("\nTarget: %s",targetStr)
                     end
                 elseif kind == "coordinator" then
                     local behavior = e:getParameter("behavior")
@@ -843,6 +929,16 @@ function radar(hidden,disMult)
                         text = text..string.format("\nEnergy: %.1f/%.1f", e:resource("energy"), e:resourceMax("energy"))
                     end
                     text = text..string.format("\nPowMul: %.1f", e:stat("powerMultiplier"))
+                    strokePoly(poly.translate(poly.rotate(e:collisionPoly(),e:rotation()),rel),closestIndicated.colour,scale,"Overlay+32001")
+                end
+                if collisionTypes[etype] then
+                    for i=e:movingCollisionCount()-1,0,-1 do
+                        local coll = e:movingCollision(i)
+                        if coll then
+                            local relpos = world.distance(coll.position,mcontroller.position())
+                            strokePoly(poly.translate(coll.collision,relpos),closestIndicated.colour,scale,"Overlay+32001")
+                        end
+                    end
                 end
             end
             if other < 0 and etype ~= "player" then
@@ -850,13 +946,47 @@ function radar(hidden,disMult)
             elseif other >= 0 and etype == "player" then
                 text = text.."\nServer Master"
             end
-        elseif type(other) == "table" then
-            -- likely a tracked unique entity
+            if etype == "stagehand" or verbose then
+                drawBox(rect.translate(e:metaBoundBox(),rel),closestIndicated.colour,scale,"Overlay+32001")
+            end
+        elseif othertype == "player" then
+            -- likely a tracked player
             text = text..string.format("\nName: %s", noDirectives(other.name))
             if other.old then
                 text = text.."\nOld"
             end
-        elseif type(other) == "string" then
+            if verbose and not other.exists then
+                if not other.lastSeen then
+                    text = text.."\nLast seen: Unknown"
+                else
+                    text = text..string.format("\nLast seen: %.0fs ago",world.time()-other.lastSeen)
+                end
+            end
+        elseif othertype == "commonUniqueEntity" then
+            text = text.."\n"..other.name
+            if verbose then
+                text = text.."\nUUID: "..other.uuid
+            end
+        elseif othertype == "interest" then
+            text = text.."\n"..other
+            local i = interests[other]
+            local rel = world.distance(i, mcontroller.position())
+            if i[4].box then
+                if rect.intersects(window,rect.translate(i[4].box,i)) then
+                    local t = rect.translate(i[4].box,rel)
+                    drawBox(t,i[4].colour,scale,"Overlay+32001")
+                end
+            else
+                local rad = i[4].radius or interestNoteDistance
+                if rect.contains(rect.pad(window,rad),i) then
+                    drawCircle(rad,rel,{
+                        color=i[4].colour,
+                        width=scale,
+                        fullbright=true
+                    },"Overlay+32001")
+                end
+            end
+        elseif othertype == "generic" then
             text = text..other
         end
         text = string.upper(text)
