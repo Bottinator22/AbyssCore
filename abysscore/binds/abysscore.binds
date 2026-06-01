@@ -1,7 +1,7 @@
 {
   "abysscore": {
     "groups": {
-      "actions": { "name": "Actions" }
+      "actions": { "name": "Tech-specific Actions" }
     },
     "name": "Abyss Core",
     "binds": {
@@ -29,6 +29,11 @@
         "default": [],
         "group": "actions",
         "name": "Cycle Radar Mode"
+      },
+      "toggleArmatureEdit": {
+        "default": [],
+        "group": "actions",
+        "name": "Toggle Armature Editor"
       }
     }
   }
