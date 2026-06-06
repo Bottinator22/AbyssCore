@@ -135,7 +135,7 @@ function init()
         if not isLocal then return "no" end
         if not storage.bossbarId or not world.entityExists(storage.bossbarId) then
             local params = sb.jsonMerge(root.assetJson("/scripts/abyssBasicParams.json"), root.assetJson("/scripts/abyssBossbarParams.json"))
-            params = sb.jsonMerge(params, {ownerId=entity.id(),noKeepAlive=false,slavePerc=false,uuid=entity.uniqueId()})
+            params = sb.jsonMerge(params, {ownerId=player.id(),noKeepAlive=false,slavePerc=false,uuid=player.uniqueId()})
             storage.bossbarId = world.spawnMonster("mechmultidrone", mcontroller.position(), params)
         end
         local bar = world.callScriptedEntity(storage.bossbarId,"toggleDamageBar")
