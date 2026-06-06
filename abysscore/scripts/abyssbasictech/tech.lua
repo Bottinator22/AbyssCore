@@ -28,23 +28,6 @@ local duckMode = false
 local walkMode = false
 local lastCommand = false
 local ignoreSpecial = false
-local heldEmote = nil
-local validEmotes = {
-    idle=true,
-    blabbering=true,
-    shouting=true,
-    happy=true,
-    sad=true,
-    neutral=true,
-    laugh=true,
-    annoyed=true,
-    oh=true,
-    oooh=true,
-    blink=true,
-    wink=true,
-    eat=true,
-    sleep=true
-}
 local explodeTimer
 local function imagePath(i)
     return string.match(i,"([^?]*)")
@@ -77,15 +60,6 @@ function setLockedPosition(p)
         lockedPosition = p
     end
 end
-local spawnableMinionTypes = {
-    ranged="^#ff0000;",
-    melee="^#7f00ff;",
-    heal="^#00ff00;",
-    bomb="^#ffff00;",
-    ranged2="^#007fff;",
-    analysis="^#00ffff;",
-    shield="^#ff00ff;",
-}
 function playSound(pool)
     world.spawnProjectile("invisibleprojectile",mcontroller.position(),entity.id(),{1,0},true,{
         timeToLive=0.1,
@@ -107,7 +81,6 @@ function init()
     if not input then
         return
     end
-    storage.abyssSpawns = storage.abyssSpawns or {}
     message.setHandler("abyss_parentState",function(_,l)
         if not l then return "nuh uh" end
         return parentState
@@ -115,28 +88,6 @@ function init()
     message.setHandler("abyss_updateFlip",function(_,l)
         if not l then return "nuh uh" end
         updateConfigAndFlip()
-    end)
-    message.setHandler("/minion", function(_,l,c) 
-        if not l then
-            return "Unauthorized"
-        end
-        if #c <= 0 then
-            return "Usage: /minion <type>"
-        end
-        local n = string.lower(c)
-        if spawnableMinionTypes[n] then
-            local params = sb.jsonMerge(root.assetJson("/scripts/abyssBasicParams.json"), root.assetJson("/scripts/abyssminion/abyssMinionParams.json"))
-            params = sb.jsonMerge(params, {ownerId=entity.id(), coreId=entity.id(), minionType=n, incMaxOnKill=false,enableRedirect=false})
-            local minionId = world.spawnMonster("mechmultidrone", mcontroller.position(), params)
-            table.insert(storage.abyssSpawns, minionId)
-            return string.format("Spawned a minion of type %s%s^reset;.",spawnableMinionTypes[n],n)
-        else
-            local str = "Invalid minion type. Valid minion types to spawn are "
-            for k,v in next, spawnableMinionTypes do
-                str = str..v..k.."^reset;, "
-            end
-            return string.sub(str,0,-3).."."
-        end
     end)
     message.setHandler("/deploy", function(_,l) 
         if not l then
@@ -250,61 +201,17 @@ function init()
         if not l then return "no" end
         walkMode = not walkMode
     end)
-    message.setHandler("/bossbar", function(_,isLocal)
-        if not isLocal then return "no" end
-        if not storage.bossbarId or not world.entityExists(storage.bossbarId) then
-            local params = sb.jsonMerge(root.assetJson("/scripts/abyssBasicParams.json"), root.assetJson("/scripts/abyssBossbarParams.json"))
-            params = sb.jsonMerge(params, {ownerId=entity.id(),noKeepAlive=false,slavePerc=false,uuid=entity.uniqueId()})
-            storage.bossbarId = world.spawnMonster("mechmultidrone", mcontroller.position(), params)
-        end
-        local bar = world.callScriptedEntity(storage.bossbarId,"toggleDamageBar")
-        if bar == "Special" then
-            return "Enabled damage bar."
-        elseif bar == "None" then
-            world.callScriptedEntity(storage.bossbarId,"kill")
-            return "Disabled damage bar."
-        else
-            storage.bossbarId = nil
-            return "Bossbar likely invalid! Resetting."
-        end
-    end)
-    message.setHandler("/emote", function(_,l,c) 
-        if not l then
-            return "Unauthorized"
-        end
-        if #c <= 0 then
-            heldEmote = nil
-            return "Reset emote."
-        end
-        if validEmotes[string.lower(c)] then
-            heldEmote = string.lower(c)
-            return string.format("Now holding emote %s.",heldEmote)
-        else
-            return "Invalid emote. Valid emotes are...\nidle, blabbering, shouting, happy, sad, neutral, laugh, annoyed, oh, oooh, blink, wink, eat, sleep"
-        end
-    end)
-    message.setHandler("/personality", function(_,l,c) 
-        if not l then
-            return "Unauthorized"
-        end
-        if #c <= 0 or not tonumber(c) then
-            return "Usage: /personality <personality index>."
-        end
-        local personalities = root.assetJson("/humanoid.config:personalities")
-        local n = tonumber(c)
-        local p = personalities[n]
-        if p then
-            player.setPersonality({
-                idle=p[1],
-                armIdle=p[2],
-                headOffset=p[3],
-                armOffset=p[4]
-            })
-            return "Set personality."
-        else
-            return "Invalid personality index"
-        end
-    end)
+    local function commandAlias(a,b)
+        message.setHandler(a,function(_,l,...)
+            if not l then return "Unauthorized" end
+            return world.sendEntityMessage(entity.id(),b,...):result()
+        end)
+    end
+    commandAlias("/bossbar","/abyssBossbar")
+    commandAlias("/emote","/abyssEmote")
+    commandAlias("/minion","/abyssMinion")
+    commandAlias("/personality","/abyssPersonality")
+    commandAlias("/configKey","/abyssConfigKey")
     message.setHandler("/setGlow", function(_,l,c) 
         if not l then
             return "Unauthorized"
@@ -340,33 +247,6 @@ function init()
             return "Set glow."
         end
     end)
-    message.setHandler("/configKey", function(_,l,c) 
-        if not l then
-            return "Unauthorized"
-        end
-        if player.getProperty("abyss_configKey") and player.getProperty("abyss_origIdentity") then
-            player.setHumanoidIdentity(sb.jsonMerge(player.humanoidIdentity(),player.getProperty("abyss_origIdentity")))
-        end
-        if #c <= 0 then
-            player.setProperty("abyss_configKey",nil)
-            animator.setLightColor("glow",player.getProperty("abyss_lightColour",{0,0,0}))
-            return "Reset config key."
-        end
-        if not player.getProperty("abyss_configKey") then
-            player.setProperty("abyss_origIdentity",player.humanoidIdentity())
-        end
-        player.setProperty("abyss_configKey",c)
-        animator.setLightColor("glow",player.getProperty(c,{}).lightColour or player.getProperty("abyss_lightColour",{0,0,0}))
-        local newName = player.getProperty(c,{}).name
-        if newName then
-            player.setName(newName)
-        end
-        if player.getProperty(c) then
-            return string.format("Set config key to '%s'.",c)
-        else
-            return string.format("Set config key to '%s'. Nothing defined at this key.",c)
-        end
-    end)
     message.setHandler("/explode",function(_,l)
         if not l then return "no" end
         if explodeTimer then
@@ -377,6 +257,16 @@ function init()
             playSound({"/sfx/tech/mech_explosion_windup.ogg"})
             explodeTimer = 0.5
             return "Exploding."
+        end
+    end)
+    message.setHandler("abyssbasic_updateLight",function(_,l)
+        if not l then return "no" end
+        local k = player.getProperty("abyss_configKey")
+        if k then
+            local cfg = player.getProperty(k,{})
+            animator.setLightColor("glow",cfg.lightColour or player.getProperty("abyss_lightColour",{0,0,0}))
+        else
+            animator.setLightColor("glow",player.getProperty("abyss_lightColour",{0,0,0}))
         end
     end)
     -- TODO: clothing 'covered region' checks, to dynamically dim the light based on visible clothing
@@ -392,40 +282,10 @@ function init()
     if not player then
         player = terra_proxy.setupProxy("player",entity.id())
     end
-    status.setPersistentEffects("abyssSimpleStats", {})
     radarInit()
     mcontroller.setAutoClearControls(true)
 end
 
-local lastFacing
-local lastConfigKey
-function updateConfigAndFlip()
-    local configKey = player.getProperty("abyss_configKey")
-    local facing = (player.facingDirection or mcontroller.facingDirection)()
-    if configKey and (configKey ~= lastConfigKey or lastFacing ~= facing) then
-        local cfg = player.getProperty(configKey)
-        local identityOverride = nil
-        if cfg then
-            if facing < 0 then
-                identityOverride = cfg.flip
-            else
-                identityOverride = cfg.base
-            end
-            if cfg.both then
-                if identityOverride then
-                    identityOverride = sb.jsonMerge(cfg.both,identityOverride)
-                else
-                    identityOverride = cfg.both
-                end
-            end
-        end
-        if identityOverride then
-            player.setHumanoidIdentity(sb.jsonMerge(player.humanoidIdentity(),identityOverride))
-        end
-    end
-    lastConfigKey = configKey
-    lastFacing = facing
-end
 local lastSpecial3 = false
 local lastTele = false
 
@@ -450,10 +310,6 @@ function update(args)
             runningSuppressed=true
         })
     end
-    if heldEmote then
-        player.emote(heldEmote)
-    end
-    updateConfigAndFlip()
     if input then
         if input.bindHeld("abysscore","blink") and not lastTele then
             if lockedPosition then
@@ -528,19 +384,6 @@ function update(args)
         end
     end
     
-    if #storage.abyssSpawns > 0 then
-        local new = {}
-        for k,v in next, storage.abyssSpawns do
-            if world.entityExists(v) then
-                world.callScriptedEntity(v, "equips")
-                table.insert(new, v)
-            end
-        end
-        storage.abyssSpawns = new
-    end
-    if storage.bossbarId and world.entityExists(storage.bossbarId) then
-        world.callScriptedEntity(storage.bossbarId,"keepAlive")
-    end
     if lockedPositionEntity and not lockedPositionEntity:exists() then
         lockedPosition = nil
         lockedPositionEntity = nil
@@ -582,7 +425,6 @@ function update(args)
 end
 function uninit()
     tech.setParentState()
-    status.clearPersistentEffects("abyssSimpleStats")
     tech.setParentDirectives()
 end
  

@@ -6,8 +6,8 @@
   "animator" : "/stats/effects/glow/glow.animation",
 
   "ignoreSpecial": true,
-  "description" : "A simple tech that makes use of Abyss Core features. Not designed for normal gameplay. Ignores special keys.",
-  "shortDescription" : "Abyss Simple (No Special) (Head)",
+  "description" : "A simple tech that makes use of Abyss Core features. Not designed for normal gameplay.",
+  "shortDescription" : "Abyss Simple (Head)",
   "rarity" : "Legendary",
   "icon" : "/tech/airdash.png",
 
