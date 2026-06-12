@@ -109,7 +109,7 @@
                 },
                 {
                     "output": {
-                        "list": "positionList"
+                        "list": "outputList"
                     },
                     "type": "action",
                     "name": "listClear"
@@ -137,6 +137,21 @@
                         "children": [
                             {
                                 "parameters": {
+                                    "list": {
+                                        "key": "outputList"
+                                    },
+                                    "entity": {
+                                        "key": "eachItem"
+                                    }
+                                },
+                                "output": {
+                                    "list": "outputList"
+                                },
+                                "type": "action",
+                                "name": "listPush"
+                            },
+                            {
+                                "parameters": {
                                     "entity": {
                                         "key": "eachItem"
                                     }
@@ -150,14 +165,14 @@
                             {
                                 "parameters": {
                                     "list": {
-                                        "key": "positionList"
+                                        "key": "outputList"
                                     },
                                     "position": {
                                         "key": "position"
                                     }
                                 },
                                 "output": {
-                                    "list": "positionList"
+                                    "list": "outputList"
                                 },
                                 "type": "action",
                                 "name": "listPush"
@@ -175,7 +190,7 @@
                             "value": "abyssPlayerPositions"
                         },
                         "arguments": {
-                            "key": "positionList"
+                            "key": "outputList"
                         }
                     },
                     "type": "action",

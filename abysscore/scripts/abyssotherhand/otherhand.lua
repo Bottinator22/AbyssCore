@@ -1,5 +1,7 @@
 require "/scripts/vec2.lua"
 
+-- note: likely animates wrong on everyone else's end, especially where FPS differs
+
 local function otherHandType()
     if activeItem.callOtherHandScript("activeItem.hand") then
         return "normal"
@@ -17,6 +19,26 @@ function activate(fireMode, shifting, moves)
     end
 end
 
+local function cropOffset(o)
+    -- only works on standard 43x43 humanoids!
+    -- has a limit to how much it can offset before stuff starts getting actually cropped out
+    local b = 0
+    local l = 0
+    local u = 43
+    local r = 43
+    if o[1] < 0 then
+        l = l - o[1]*2
+    elseif o[1] > 0 then
+        r = r - o[1]*2
+    end
+    if o[2] < 0 then
+        b = b - o[2]*2
+    elseif o[2] > 0 then
+        u = u - o[2]*2
+    end
+    return string.format("?crop=%d;%d;%d;%d",l,b,r,u)
+end
+local stateDirectives
 local anims
 function init()
     -- I'd make this adapt to species but there's probably no point to that
@@ -31,6 +53,13 @@ function init()
             loop=not noLoop
         }
     end
+    local function bobToCropOffset(l,so)
+        local o = {}
+        for _,v in next, l do
+            table.insert(o,cropOffset({0,-v-(so or 0)}))
+        end
+        return o
+    end
     anims = {
         walk=configToAnim(2,baseHumanoidConfig.armWalkSeq),
         run=configToAnim(3,baseHumanoidConfig.armRunSeq),
@@ -41,6 +70,16 @@ function init()
         duck=configToAnim(8),
         sit=configToAnim(9),
         lay=configToAnim(10)
+    }
+    stateDirectives={
+        walk=bobToCropOffset(baseHumanoidConfig.walkBob),
+        run=bobToCropOffset(baseHumanoidConfig.runBob,baseHumanoidConfig.runFallOffset),
+        swim=bobToCropOffset(baseHumanoidConfig.swimBob),
+        jump=cropOffset({0,-baseHumanoidConfig.jumpBob}),
+        fall=cropOffset({0,-baseHumanoidConfig.runFallOffset}),
+        duck=cropOffset({0,-baseHumanoidConfig.duckOffset}),
+        sit=cropOffset({0,-baseHumanoidConfig.sitOffset}),
+        lay=cropOffset({0,-baseHumanoidConfig.layOffset})
     }
 end
 
@@ -109,12 +148,15 @@ function update(dt,fireMode,shifting,moves)
     lastState = state
     --world.debugText(string.format("%s\n%d\n%.1f",state,frame,frameTimer),mcontroller.position(),"cyan")
     if state == "idle" then
-        if not punching then
-            setArmFrame(player.humanoidIdentity().personalityArmIdle)
-        end
-    elseif state == "duck" then
-        if not punching then
-            setArmFrame("duck.1?crop=0;0;43;27") -- NOTE: only works with base vanilla-like humanoids!
+        setArmFrame(player.humanoidIdentity().personalityArmIdle)
+    elseif state == "sit" and player.getProperty("abyss_sitArmOverride") then
+        -- optionally override the sit frame for arms when the item is held
+        local o = player.getProperty("abyss_sitArmOverride")
+        if type(o) == "table" then
+            activeItem.setFrontArmFrame(o[1])
+            activeItem.setBackArmFrame(o[2])
+        else
+            setArmFrame(o)
         end
     else
         frameTimer = frameTimer + dt
@@ -136,15 +178,21 @@ function update(dt,fireMode,shifting,moves)
             end
             frameTimer = frameTimer - anim.frameTime
         end
-        -- still do the animation behind the scenes when punching
-        if not punching then
-            local frameN = frame
-            if anim.sequence then
-                frameN = anim.sequence[frame]
-            end
-            local frameName = string.format("%s.%d",state,frameN)
-            setArmFrame(frameName)
+        
+        local frameN = frame
+        if anim.sequence then
+            frameN = anim.sequence[frame]
         end
+        local directives = ""
+        if stateDirectives[state] then
+            if type(stateDirectives[state]) == "table" then
+                directives = stateDirectives[state][frame]
+            else
+                directives = stateDirectives[state]
+            end
+        end
+        local frameName = string.format("%s.%d%s",state,frameN,directives)
+        setArmFrame(frameName)
     end
 end
 

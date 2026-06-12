@@ -5,6 +5,9 @@ require "/scripts/rect.lua"
 require "/scripts/abysscommand.lua"
 require "/scripts/abyssradar.lua"
 require "/scripts/terra_proxy.lua"
+require "/scripts/abysshumanoidconfig.lua"
+
+-- TODO: make this more modular
 
 player = nil
 local workVec21 = {0,0}
@@ -225,17 +228,9 @@ function init()
             table.insert(split, n)
         end
         local k = player.getProperty("abyss_configKey")
-        if k then
-            local cfg = player.getProperty(k) or {}
-            if #split < 3 then
-                cfg.lightColour = nil
-                animator.setLightColor("glow",player.getProperty("abyss_lightColour",{0,0,0}))
-                return "Reset glow. (Using base light colour as default!)"
-            end
-            cfg.lightColour = split
-            player.setProperty(k,cfg)
-            animator.setLightColor("glow",split)
-            return "Set glow."
+        local cfg = getAbyssConfig()
+        if cfg and cfg.lightColour then
+            return "Cannot override glow; a config is setting glow already"
         else
             if #split < 3 then
                 player.setProperty("abyss_lightColour",{0,0,0})
@@ -261,23 +256,13 @@ function init()
     end)
     message.setHandler("abyssbasic_updateLight",function(_,l)
         if not l then return "no" end
-        local k = player.getProperty("abyss_configKey")
-        if k then
-            local cfg = player.getProperty(k,{})
-            animator.setLightColor("glow",cfg.lightColour or player.getProperty("abyss_lightColour",{0,0,0}))
-        else
-            animator.setLightColor("glow",player.getProperty("abyss_lightColour",{0,0,0}))
-        end
-    end)
-    -- TODO: clothing 'covered region' checks, to dynamically dim the light based on visible clothing
-    animator.setParticleEmitterActive("sparkles",false)
-    local k = player.getProperty("abyss_configKey")
-    if k then
-        local cfg = player.getProperty(k,{})
+        local cfg = getAbyssConfig() or {}
         animator.setLightColor("glow",cfg.lightColour or player.getProperty("abyss_lightColour",{0,0,0}))
-    else
-        animator.setLightColor("glow",player.getProperty("abyss_lightColour",{0,0,0}))
-    end
+    end)
+    -- TODO: optional clothing 'covered region' checks, to dynamically dim the light based on visible clothing
+    animator.setParticleEmitterActive("sparkles",false)
+    local cfg = getAbyssConfig() or {}
+    animator.setLightColor("glow",cfg.lightColour or player.getProperty("abyss_lightColour",{0,0,0}))
     ignoreSpecial = config.getParameter("ignoreSpecial",false)
     if not player then
         player = terra_proxy.setupProxy("player",entity.id())

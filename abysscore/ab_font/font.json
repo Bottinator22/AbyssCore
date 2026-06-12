@@ -59,5 +59,6 @@
     "+":"/ab_font/plus.png",
     "🐟":"/ab_font/fish.png",
     "!":"/ab_font/exclamation.png",
-    "?":"/ab_font/question.png"
+    "?":"/ab_font/question.png",
+    "|":"/ab_font/bar.png"
 } 

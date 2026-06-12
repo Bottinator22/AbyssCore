@@ -1,23 +1,39 @@
 require "/scripts/terra_vec2ref.lua"
+require "/scripts/terra_vec3.lua"
 require "/scripts/terra_renderutil.lua"
 require "/scripts/abyssrenderutil.lua"
 require "/scripts/terra_proxy.lua"
 require "/scripts/rect.lua"
 require "/scripts/poly.lua"
 
--- note: world time is used for 'last seen' numbers. this is inaccurate.
--- TODO: reuse a stagehand to load player blips
+-- note: world time is used for 'last seen' numbers. this is somewhat inaccurate.
+-- TODO: check for serverside player blips, in case a server spawns server master player entities
 
 local interests = {}
 local font
 local playerPositionPromises = {}
 local serverPlayerPositions = {}
+local unknownCharSet = {}
 
+local blipLoaderId
+
+local function ensureLoader()
+    if not blipLoaderId or not world.entityExists(blipLoaderId) then
+        local params = root.assetJson("/scripts/abyssRadarLoaderParams.json")
+        blipLoaderId = world.spawnStagehand(mcontroller.position(),"mailbox",params)
+    end
+    world.callScriptedEntity(blipLoaderId,"keepAlive")
+end
+
+local doGTWarn = true
 local function getGenericTime()
     if threads then
         local t = world.sendEntityMessage(entity.id(),"abyss_getGenericTime"):result()
         if not t then
-            sb.logWarn("abyss_getGenericTime message handler not responding?")
+            if doGTWarn then
+                doGTWarn = false
+                sb.logWarn("abyss_getGenericTime message handler not responding?")
+            end
             return 0
         end
         return t
@@ -50,23 +66,6 @@ local function excludeEntity(e)
         return true
     end
     return false
-end
-function radarPlayerPositions(positions)
-    if #positions < #serverPlayerPositions then
-        -- just clear it all out, can't rely on the old data at all
-        serverPlayerPositions = {}
-    end
-    for k,v in next, positions do
-        if type(v) ~= "table" or type(v[1]) ~= "number" or type(v[2]) ~= "number" then
-            sb.logWarn("Broken player position detected!")
-            return
-        end
-        if serverPlayerPositions[k] then
-            v[4] = serverPlayerPositions[k][4]
-        end
-        v[3] = 255
-        serverPlayerPositions[k] = v
-    end
 end
 local function getLocalAnimator()
     if not localAnimator then
@@ -131,7 +130,9 @@ local playerPositionsToRender = {}
 local passiveProcessed = 0
 local queriesSent = 0
 local queriesSentTotal = 0
+local myCid
 local connectionNames = {}
+local connectionPlayers = {}
 local function connectionId(eid)
     if eid >= 0 then
         return 0 -- server
@@ -202,16 +203,38 @@ local function saveInterests()
         player.setProperty("radarInterests",interests)
     end
 end
+function radarPlayerPositions(positions)
+    if #positions % 1 == 1 then
+        sb.logWarn("Player position list is incorrect!")
+        return
+    end
+    if #positions/2 < #serverPlayerPositions then
+        -- just clear it all out
+        serverPlayerPositions = {}
+    end
+    for i=0,#positions/2-1 do
+        local id = positions[i*2+1] -- entity id, may not exist
+        local v = positions[i*2+2]
+        if type(v) ~= "table" or type(v[1]) ~= "number" or type(v[2]) ~= "number" or type(id) ~= "number" then
+            sb.logWarn("Broken player position detected!")
+            return
+        end
+        v[3] = 255
+        v[4] = connectionId(id)
+        serverPlayerPositions[i+1] = v
+    end
+end
 function radarInit()
     if not player then
         return
     end
-    for k,v in next, root.assetJson("/scripts/abyssUniqueObjects.json") do
-        if not commonUniqueEntities[k] then
-            commonUniqueEntities[k] = {name=v,colour=newUniqueEColour(),uuid=k}
+    if root.getConfiguration then
+        for k,v in next, root.assetJson("/scripts/abyssUniqueObjects.json") do
+            if not commonUniqueEntities[k] then
+                commonUniqueEntities[k] = {name=v,colour=newUniqueEColour(),uuid=k}
+            end
         end
     end
-    initialized = true
     interests = (root.getConfiguration and root.getConfiguration("abyss_radarInterests")) or player.getProperty("radarInterests") or {}
     if root.getConfiguration then
         local pri = player.getProperty("radarInterests")
@@ -223,11 +246,9 @@ function radarInit()
             saveInterests()
         end
     end
-    message.setHandler("abyssPlayerPositions", function (...)
+    message.setHandler("abyssPlayerPositions", function (_,l,...)
         -- note: could theoretically be jammed or broken
         local positions = {...}
-        table.remove(positions,1)
-        table.remove(positions,1)
         radarPlayerPositions(positions)
     end)
     message.setHandler("/radarInterestColour",function(_,l,c)
@@ -490,20 +511,46 @@ function radarInit()
                 end
             end
         end
-        local numLatest = 0
-        local latestTimer = 0
+        local unknown = 0
         for k,v in next, serverPlayerPositions do
-            if v[3] > latestTimer then
-                numLatest = 1
-                latestTimer = v[3]
-            elseif v[3] == latestTimer then
-                numLatest = numLatest + 1
+            local cid = v[4]
+            if cid ~= myCid and not connectionPlayers[connectionKey(cid)] then
+                unknown = unknown + 1
             end
         end
         local out = string.format("Tracked unique entities: %d (%d on world, %d recent, %d active)\
-Serverside player blips: %d (%d in latest ping)",numTracked,numTrackedWorld,numTrackedRecent,numTrackedActive,
-                                  #serverPlayerPositions,numLatest)
+Serverside player blips: %d (%d unidentified)",
+                                  numTracked,numTrackedWorld,numTrackedRecent,numTrackedActive,
+                                  #serverPlayerPositions,unknown)
         return out
+    end)
+    message.setHandler("/radarUnknownChars",function(_,l)
+        if not l then return "no" end
+        local out = "Unknown characters: "
+        local any = false
+        for k,_ in next, unknownCharSet do
+            if not any then
+                any = true
+            else
+                out = out..", "
+            end
+            out = out..k
+        end
+        if any then
+            return out
+        else
+            return "Haven't attempted to draw any unknown characters yet."
+        end
+    end)
+    message.setHandler("/radarAutoLoad",function(_,l)
+        if not l then return "no" end
+        local en = not root.getConfiguration("abyss_radarLoadingEnabled")
+        root.setConfiguration("abyss_radarLoadingEnabled",en)
+        if en then
+            return "Auto-loading unidentified blips."
+        else
+            return "No longer auto-loading blips."
+        end
     end)
     
     storage.radarPlayerPositions = storage.radarPlayerPositions or {}
@@ -544,7 +591,9 @@ Serverside player blips: %d (%d in latest ping)",numTracked,numTrackedWorld,numT
             end
         end
     end)
-    connectionNames[connectionKey(connectionId(player.id()))] = "Self"
+    myCid = connectionId(player.id())
+    connectionNames[connectionKey(myCid)] = "Self"
+    initialized = true
 end
 local function playerPosKey(v)
     return string.format("p_%s",world.entityUniqueId(v))
@@ -572,7 +621,9 @@ local function updatePlayer(v)
     dat.lastChecked = world.time()
     dat.lastSeen = world.time()
     if v < 0 and v ~= player.id() then
-        connectionNames[connectionKey(connectionId(v))] = world.entityName(v)
+        local key = connectionKey(connectionId(v))
+        connectionNames[key] = world.entityName(v)
+        connectionPlayers[key] = dat
     end
     storage.radarPlayerPositions[k] = dat
 end
@@ -766,7 +817,7 @@ function radar(hidden,disMult)
     if verbose then
         indicateEntity(entity.id(),{255,255,255,127},0.5)
     else
-        indicatePosition(mcontroller.position(),{255,255,255,127},1,"\nSelf","generic",0.5)
+        indicatePosition(mcontroller.position(),{255,255,255,127},1,"Self","generic",0.5)
     end
     for k,v in next, commonUniqueEntities do
         if not v.pos then
@@ -840,9 +891,6 @@ function radar(hidden,disMult)
     sb.setLogMap("abyssradar_players_onWorld",string.format("%d",#serverPlayerPositions))
     
     local types = {"npc","monster", "vehicle","stagehand","plantDrop"}
-    if not world.players then
-        table.insert(types, "player")
-    end
     if includeProjectiles then
         table.insert(types, "projectile")
     end
@@ -866,6 +914,13 @@ function radar(hidden,disMult)
         if not hadFindingType then
             table.insert(types,radarFindingType)
         end
+    end
+    if hidden then
+        -- don't waste time on queries that aren't visible
+        types = {}
+    end
+    if not world.players then
+        table.insert(types, "player")
     end
     local nearbyEntities = world.entityQuery(mcontroller.position(), 300, {includedTypes=types})
     for k,v in next, nearbyEntities do
@@ -939,11 +994,13 @@ function radar(hidden,disMult)
             end
         end
     end
+    local toLoad
     --local newServerPlayerPositions = {}
     for k,v in next, serverPlayerPositions do
         local dis = world.magnitude(v, mcontroller.position())
         -- TODO: maybe check if offscreen or onscreen instead
-        if world.pointCollision(v,{"Null"}) then
+        local unidentified = v[4] ~= myCid and not connectionPlayers[connectionKey(v[4])]
+        if unidentified then
             local crgb
             local size = 0.5
             if interestCheck(v) then
@@ -959,12 +1016,26 @@ function radar(hidden,disMult)
                 crgb = renderutil.toRGB(c)
             end
             lineTowardsPos(v, crgb, 1.5)
-            indicatePosition(v,indicAlpha(crgb),size,nil,"blip",0.5)
+            indicatePosition(v,indicAlpha(crgb),size,v[4],"blip",0.5)
         end
         v[3] = math.max(v[3] - pingTimescale,64)
         --[[if v[3] > 0 then
             table.insert(newServerPlayerPositions, v)
         end]]
+        if unidentified then
+            toLoad = v
+        end
+    end
+    if toLoad and root.getConfiguration("abyss_radarLoadingEnabled") then
+        ensureLoader()
+        world.callScriptedEntity(blipLoaderId,"stagehand.setPosition",toLoad)
+    elseif blipLoaderId then
+        if world.entityExists(blipLoaderId) then
+            -- keep it on self until it dies
+            world.callScriptedEntity(blipLoaderId,"stagehand.setPosition",mcontroller.position())
+        else
+            blipLoaderId = nil
+        end
     end
     --serverPlayerPositions = newServerPlayerPositions
     local function noDirectives(n)
@@ -1145,8 +1216,10 @@ function radar(hidden,disMult)
                         },"Overlay+32001")
                     end
                 end
+            elseif othertype == "blip" then
+                text = text..string.format("\n %s (%d)",noDirectives(connectionName(other)),other)
             elseif othertype == "generic" then
-                text = text..other
+                text = text.."\n"..other
             end
         elseif renderingPlayerList then
             -- TODO: this is too much repeated stuff
@@ -1185,16 +1258,19 @@ function radar(hidden,disMult)
             -- multiple players
             text = string.format("%d interests",numInterests)
             local totalPos = {0,0}
+            local totalColour = {0,0,0}
             size = 2
-            colour = {255,255,255,255}
             for k,v in next, hoveredIndications do
                 if v.othertype == "interest" then
                     local dis = world.magnitude(v.pos,mcontroller.position())
                     totalPos = vec2.add(totalPos,v.relPos)
                     text = text..string.format("\n%s (%.1f)",v.other,dis)
+                    totalColour = vec3.add(totalColour,v.colour)
                 end
             end
+            local colourMult = math.min(255/math.max(totalColour[1],totalColour[2],totalColour[3]),1)
             closestRelPos = vec2.div(totalPos,numInterests)
+            colour = {totalColour[1]*colourMult,totalColour[2]*colourMult,totalColour[3]*colourMult,255}
         end
         text = string.upper(text)
         -- simple text renderer
@@ -1228,7 +1304,11 @@ function radar(hidden,disMult)
             for c in string.gmatch(v,".") do
                 -- draw a character
                 if font[c] ~= "space" then
-                    local image = font[c] or "/ab_font/unknown.png"
+                    local image = font[c]
+                    if not image then
+                        unknownCharSet[c] = true
+                        image = "/ab_font/unknown.png"
+                    end
                     local drawable = {
                         image=image,
                         fullbright=true,

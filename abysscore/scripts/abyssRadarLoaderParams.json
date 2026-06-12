@@ -1,0 +1,8 @@
+{
+    "scripts": [
+      "/scripts/abyssradar_loader.lua"
+    ],
+    "broadcastArea": [-8,-8,8,8],
+    "scriptDelta": 10,
+    "clientEntityMode": "clientPresenceMaster"
+} 

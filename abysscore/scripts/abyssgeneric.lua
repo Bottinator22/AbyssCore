@@ -1,3 +1,6 @@
+require "/scripts/abysshumanoidconfig.lua"
+require "/scripts/terra_vec2ref.lua"
+
 local pingTestPlayers
 local utilThread
 local genericTimer = 0
@@ -30,37 +33,11 @@ local spawnableMinionTypes = {
     shield="^#ff00ff;",
 }
 
-local lastFacing
-local lastConfigKey
-function updateConfigAndFlip()
-    local configKey = player.getProperty("abyss_configKey")
-    local facing = (player.facingDirection or mcontroller.facingDirection)()
-    if configKey and (configKey ~= lastConfigKey or lastFacing ~= facing) then
-        local cfg = player.getProperty(configKey)
-        local identityOverride = nil
-        if cfg then
-            if facing < 0 then
-                identityOverride = cfg.flip
-            else
-                identityOverride = cfg.base
-            end
-            if cfg.both then
-                if identityOverride then
-                    identityOverride = sb.jsonMerge(cfg.both,identityOverride)
-                else
-                    identityOverride = cfg.both
-                end
-            end
-        end
-        if identityOverride then
-            player.setHumanoidIdentity(sb.jsonMerge(player.humanoidIdentity(),identityOverride))
-        end
-    end
-    lastConfigKey = configKey
-    lastFacing = facing
-end
-
 function init()
+    if not threads then
+        script.setUpdateDelta(0)
+        return
+    end
     utilThread = threads.create({
         name="abyss_utilThread",
         scripts={
@@ -208,33 +185,7 @@ function init()
             return "Invalid personality index"
         end
     end)
-    message.setHandler("/abyssConfigKey", function(_,l,c) 
-        if not l then
-            return "Unauthorized"
-        end
-        if player.getProperty("abyss_configKey") and player.getProperty("abyss_origIdentity") then
-            player.setHumanoidIdentity(sb.jsonMerge(player.humanoidIdentity(),player.getProperty("abyss_origIdentity")))
-        end
-        if #c <= 0 then
-            player.setProperty("abyss_configKey",nil)
-            world.sendEntityMessage(player.id(),"abyssbasic_updateLight")
-            return "Reset config key."
-        end
-        if not player.getProperty("abyss_configKey") then
-            player.setProperty("abyss_origIdentity",player.humanoidIdentity())
-        end
-        player.setProperty("abyss_configKey",c)
-        world.sendEntityMessage(player.id(),"abyssbasic_updateLight")
-        local newName = player.getProperty(c,{}).name
-        if newName then
-            player.setName(newName)
-        end
-        if player.getProperty(c) then
-            return string.format("Set config key to '%s'.",c)
-        else
-            return string.format("Set config key to '%s'. Nothing defined at this key.",c)
-        end
-    end)
+    initConfigKeyCommands()
     
     local function validateUuid(uid)
         local n = 0
@@ -367,7 +318,7 @@ function init()
     end)
     message.setHandler("/camfocus",function(_,l)
         if not l then return end
-        player.setCameraFocusEntity(world.entityQuery(player.aimPosition(),1)[1])
+        player.setCameraFocusEntity(world.entityQuery(player.aimPosition(),1,{order="nearest",boundMode="position"})[1])
     end)
     local ouchOverride = player.getProperty("abyss_ouchOverride")
     if ouchOverride then
