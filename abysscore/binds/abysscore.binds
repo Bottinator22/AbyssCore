@@ -34,6 +34,11 @@
         "default": [],
         "group": "actions",
         "name": "Toggle Armature Editor"
+      },
+      "toggleFreecam": {
+        "default": [],
+        "group": "actions",
+        "name": "Cycle Freecam"
       }
     }
   }

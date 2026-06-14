@@ -2,7 +2,7 @@
     "scripts": [
       "/scripts/abyssbasicstagehand.lua"
     ],
-    "broadcastArea": [-8,-8,8,8],
+    "broadcastArea": [-1,-1,1,1],
     "scriptDelta": 10,
-    "clientEntityMode": "clientPresenceMaster"
+    "clientEntityMode": "clientMasterAllowed"
 } 

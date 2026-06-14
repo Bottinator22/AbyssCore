@@ -224,10 +224,12 @@ function radarPlayerPositions(positions)
         serverPlayerPositions[i+1] = v
     end
 end
+local scannerPunchyParams
 function radarInit()
     if not player then
         return
     end
+    scannerPunchyParams = sb.jsonMerge(root.assetJson("/scripts/abyssScannerParams.json"), {ownerId=entity.id()})
     if root.getConfiguration then
         for k,v in next, root.assetJson("/scripts/abyssUniqueObjects.json") do
             if not commonUniqueEntities[k] then
@@ -713,7 +715,7 @@ function radar(hidden,disMult)
     -- render lines to show the locations of nearby entities and all players in the world, as well as mech beacons
     if getGenericTime() > lastPing + 3/pingTimescale then
         lastPing = getGenericTime()
-        world.spawnMonster("punchy", mcontroller.position(), sb.jsonMerge(root.assetJson("/scripts/abyssScannerParams.json"), {ownerId=entity.id()}))
+        world.spawnMonster("punchy", mcontroller.position(), scannerPunchyParams)
     end
     local interestNoteColourHSV = {math.cos(world.time()*5)*30+30,1,1}
     local interestNoteColour = renderutil.toRGB(interestNoteColourHSV)

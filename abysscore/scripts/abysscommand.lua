@@ -259,7 +259,7 @@ function command.update(args)
         local screenRect = world.clientWindow()
         local margin = 20
         local es = world.entityQuery({screenRect[1]-margin,screenRect[2]-margin},{screenRect[3]+margin,screenRect[4]+margin},{
-            includedTypes={"creature","vehicle"},order="nearest",callScript="commandable"
+            order="nearest",callScript="commandable"
         })
         for k,v in next, es do
             local category = ensureCategory(v)
@@ -372,7 +372,7 @@ function command.update(args)
                 local endPos = tech.aimPosition()
                 local minPos = {math.min(selectBeginPos[1], endPos[1]),math.min(selectBeginPos[2], endPos[2])}
                 local maxPos = {math.max(selectBeginPos[1], endPos[1]),math.max(selectBeginPos[2], endPos[2])}
-                local q = world.entityQuery(minPos, maxPos, {includedTypes={"creature","vehicle"},callScript="commandable"})
+                local q = world.entityQuery(minPos, maxPos, {callScript="commandable"})
                 for k,v in next, q do
                     if not table.find(selected, v) then
                         table.insert(selected, v)
@@ -383,7 +383,7 @@ function command.update(args)
                 if args.moves.run then
                     selected = {}
                 end
-                local toSelect = world.entityQuery(tech.aimPosition(), 2, {includedTypes={"creature","vehicle"},order="nearest",callScript="commandable"})
+                local toSelect = world.entityQuery(tech.aimPosition(), 2, {order="nearest",callScript="commandable"})
                 local sel = nil
                 local selPriority = -math.huge
                 for _,v in next, toSelect do
