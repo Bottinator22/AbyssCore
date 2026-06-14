@@ -1,9 +1,41 @@
 require "/scripts/vec2.lua"
 require "/scripts/poly.lua"
+require "/scripts/terra_proxy.lua"
 
-abyssutil = {}
-function abyssutil.calculateEntitySize(e, mode)
-    -- uses queries to figure out an entity's size
+local function imagePath(i)
+    return string.match(i,"([^?]*)")
+end
+local function pathFName(p)
+    local out = ""
+    for v in string.gmatch(p,"([^/]*)") do
+        out = v
+    end
+    return out
+end
+function getActiveEmote(e)
+    -- idk if I'll ever use this. it's there, ig
+    local portrait = world.entityPortrait(e or entity.id(),"head")
+    for k,v in next, portrait do
+        local fname = pathFName(imagePath(v.image))
+        if string.match(fname,"([^:]*)") == "emote.png" then
+            return string.sub(fname,string.find(fname,":")+1,#fname)
+        end
+    end
+end
+function ensureBasicProxies()
+    -- ensures the presence of my most commonly used two proxies
+    -- returns false if they are not present (and updating should be delayed)
+    if not localAnimator then
+        localAnimator = terra_proxy.setupProxy("localAnimator",entity.id())
+    end
+    if not player then
+        player = terra_proxy.setupProxy("player",entity.id())
+    end
+    return not not (player or localAnimator)
+end
+function calculateEntitySize(e, mode)
+    -- uses queries to figure out an entity's size as a rect
+    -- unnecessary if world.entity is present, since that can be used to get it directly
     local t = world.entityType(e)
     local epos = world.entityPosition(e)
     local bbox = {0,0,0,0}

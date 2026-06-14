@@ -6,19 +6,9 @@ require "/scripts/abyssradar.lua"
 local module = {
     moduleSlots={},
     passive=true,
-    enableKey=nil
+    enableMoveKey=nil
 }
-local radarMode = 0
-local function setEnabled(mode)
-    if editor ~= mode then
-        editor = mode
-        if editor then
-            armatureedit.init(module.entity)
-        else
-            armatureedit.uninit()
-        end
-    end
-end
+local radarMode = 1
 radarModule = module
 local m = module
 function module.isBindHeld(args)

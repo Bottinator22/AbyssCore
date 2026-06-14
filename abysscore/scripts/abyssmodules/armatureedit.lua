@@ -11,10 +11,15 @@ local module = {
 local editor = false
 local function setEnabled(mode)
     if editor ~= mode then
-        editor = mode
-        if editor then
-            armatureedit.init(module.entity)
+        if mode then
+            if not module.entity then
+                sb.logWarn("Attempted to enable armature editor module with no armature entity to edit!")
+            else
+                editor = true
+                armatureedit.init(module.entity)
+            end
         else
+            editor = false
             armatureedit.uninit()
         end
     end

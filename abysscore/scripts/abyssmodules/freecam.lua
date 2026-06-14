@@ -1,19 +1,26 @@
 require "/scripts/abyssmodules/modules.lua"
 
+-- simple freecam module
+
 local module = {
     moduleSlots={
         movement=true
     }
 }
 local freecamStagehand = nil
+local function stagehandExists()
+    return not not (freecamStagehand and world.entityExists(freecamStagehand))
+end
 local function setEnabled(mode)
-    if mode then
-        if freecamStagehand and world.entityExists(freecamStagehand) then
-            world.callScriptedEntity(freecamStagehand,"stagehand.die")
-        else
+    local exists = stagehandExists()
+    if mode and not exists then
+        if world.entity then
             local params = root.assetJson("/scripts/abyssBasicStagehandParams.json")
             freecamStagehand = world.spawnStagehand(mcontroller.position(),"mailbox",params)
+            player.setCameraFocusEntity(freecamStagehand)
         end
+    elseif exists then
+        world.callScriptedEntity(freecamStagehand,"stagehand.die")
     end
 end
 function module.isBindHeld(args)
@@ -24,23 +31,25 @@ function module.init()
 end
 function module.enable()
 end
+--[[
 function module.isActive()
-    return not not freecamStagehand
-end
+    return stagehandExists()
+end]]
+module.isActive = stagehandExists
 function module.bindPressed()
-    setEnabled(not freecamStagehand)
+    setEnabled(not stagehandExists())
 end
 function module.disable()
     setEnabled(false)
 end
 function module.updateEnabled(args)
-    if freecamStagehand and world.entityExists(freecamStagehand) then
+    if stagehandExists() then
         world.callScriptedEntity(freecamStagehand,"keepAlive")
         
         local pos = world.entityPosition(freecamStagehand)
         
-        local s = args.dt
-        if args.moves.run   then s = 5*args.dt end
+        local s = 200*args.dt
+        if args.moves.run   then s = 40*args.dt end
         if args.moves.right then pos[1] = pos[1] + s end
         if args.moves.left  then pos[1] = pos[1] - s end
         if args.moves.up    then pos[2] = pos[2] + s end
@@ -49,4 +58,4 @@ function module.updateEnabled(args)
         world.callScriptedEntity(freecamStagehand,"stagehand.setPosition",pos)
     end
 end
-presentModules.armatureEditor = module
+presentModules.freecam = module

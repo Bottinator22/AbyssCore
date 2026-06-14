@@ -150,6 +150,19 @@ local function connectionName(cid)
         return connectionNames[connectionKey(cid)] or "Unknown"
     end
 end
+local referenceType
+local reference
+local function distanceReferencePosition()
+    if referenceType == "camera" then
+        return camera.position()
+    elseif referenceType == "interest" then
+        return reference
+    elseif referenceType == "player" then
+        return reference.pos
+    else
+        return mcontroller.position()
+    end
+end
 local function updatePlayerPosPromise(k,v,isLive)
     local promise = playerPositionPromises[k]
     local sameWorld = v.worldId == player.worldId()
@@ -223,6 +236,54 @@ function radarPlayerPositions(positions)
         v[4] = connectionId(id)
         serverPlayerPositions[i+1] = v
     end
+end
+local function removeDirectives(n)
+    local nn = ""
+    local iD = false
+    for i=1,#n do
+        local c = string.sub(n,i,i)
+        if c == "^" then
+            iD = true
+        end
+        if not iD then
+            nn = nn..c
+        end
+        if c == ";" then
+            iD = false
+        end
+    end
+    return nn
+end
+local function playerByPartialName(n)
+    local sn = string.lower(removeDirectives(n))
+    local num = 0
+    local out
+    for k,v in next, storage.radarPlayerPositions do
+        if v.worldId == player.worldId() and string.sub(string.lower(removeDirectives(v.name)),1,#sn) == sn then
+            out = v
+            num = num + 1
+        end
+    end
+    if num > 1 then
+        -- try again with case sensitivity
+        out = nil
+        num = 0
+        sn = string.lower(removeDirectives(n))
+        
+        for k,v in next, storage.radarPlayerPositions do
+            if v.worldId == player.worldId() and string.sub(removeDirectives(v.name),1,#sn) == sn then
+                out = v
+                num = num + 1
+            end
+        end
+        
+        if num > 1 then
+            return num
+        else
+            return out
+        end
+    end
+    return out
 end
 local scannerPunchyParams
 function radarInit()
@@ -546,12 +607,60 @@ Serverside player blips: %d (%d unidentified)",
     end)
     message.setHandler("/radarAutoLoad",function(_,l)
         if not l then return "no" end
+        if not world.entity then
+            return "Cannot auto-load, necessary features may not be implemented."
+        end
         local en = not root.getConfiguration("abyss_radarLoadingEnabled")
         root.setConfiguration("abyss_radarLoadingEnabled",en)
         if en then
             return "Auto-loading unidentified blips."
         else
             return "No longer auto-loading blips."
+        end
+    end)
+    message.setHandler("/radarReference",function(_,l,c)
+        if not l then return "no" end
+        local split = {}
+        for v in string.gmatch(c,"([^ ]+)") do
+            table.insert(split, v)
+        end
+        if #split <= 0 then
+            referenceType = nil
+            return
+        end
+        local i = split[2]
+        if split[1] == "self" then
+            referenceType = nil
+        elseif split[1] == "camera" then
+            referenceType = "camera"
+        elseif split[1] == "interest" then
+            if not i then
+                return "Need an interest."
+            end
+            local interest = interests[i]
+            if not interest then
+                return "Can't find an interest of that name."
+            end
+            if interest[3] ~= player.worldId() then
+                return "That interest isn't on-world."
+            end
+            referenceType = "interest"
+            reference = interest
+        elseif split[1] == "player" then
+            if not i then
+                return "Need a player."
+            end
+            local p = playerByPartialName(i)
+            if not p then
+                return "Couldn't find any players of that name."
+            end
+            if type(p) == "number" then
+                return string.format("There are %d players that fit that name.",p)
+            end
+            referenceType = "player"
+            reference = p
+        else
+            return "Not a valid reference type."
         end
     end)
     
@@ -628,6 +737,7 @@ local function updatePlayer(v)
         connectionPlayers[key] = dat
     end
     storage.radarPlayerPositions[k] = dat
+    return dat
 end
 local namelessTypes = {
     projectile=true,
@@ -721,8 +831,10 @@ function radar(hidden,disMult)
     local interestNoteColour = renderutil.toRGB(interestNoteColourHSV)
     
     local window = camera and camera.worldScreenRect() or world.clientWindow()
-    local relWindow1 = world.distance(rect.ll(window),mcontroller.position())
-    local relWindow2 = world.distance(rect.ur(window),mcontroller.position())
+    local cameraPos = camera and camera.position or mcontroller.position
+    local cameraOffset = world.distance(cameraPos(),mcontroller.position())
+    local relWindow1 = world.distance(rect.ll(window),cameraPos())
+    local relWindow2 = world.distance(rect.ur(window),cameraPos())
     local relWindow = {relWindow1[1],relWindow1[2],relWindow2[1],relWindow2[2]}
     local scale = (window[4] - window[2])/65
     local localAnimator = getLocalAnimator()
@@ -755,9 +867,14 @@ function radar(hidden,disMult)
     end
     local function lineTowardsPos(p, c, d)
         if hidden then return end
-        local angle = vec2.angle(world.distance(p, mcontroller.position()))
-        local s = vec2.withAngle(angle, (3*d*disMult)*scale)
-        local t = vec2.withAngle(angle, (3*d*disMult+d)*scale)
+        local dis = world.distance(p, distanceReferencePosition())
+        local angle = vec2.angle(dis)
+        if vec2.mag(dis) < 0.1 then
+            return
+        end
+        local o = world.distance(distanceReferencePosition(),mcontroller.position())
+        local s = vec2.add(vec2.withAngle(angle, (3*d*disMult  )*scale),o)
+        local t = vec2.add(vec2.withAngle(angle, (3*d*disMult+d)*scale),o)
         local l = generateLineDrawable(s,t)
         l.color = c
         l.width = scale*d
@@ -767,7 +884,7 @@ function radar(hidden,disMult)
     local function lineTowards(e, c)
         return lineTowardsPos(world.entityPosition(e),c, 1)
     end
-    local raim = world.distance(tech.aimPosition(),mcontroller.position())
+    local raim = world.distance(tech.aimPosition(),cameraPos())
     -- TODO: replacing this entire list every frame is kinda... bad
     local hoveredIndications = {}
     local hoveredDis = 2
@@ -775,7 +892,7 @@ function radar(hidden,disMult)
         if visibleLevel < 1 then
             return
         end
-        local rel = world.distance(p, mcontroller.position())
+        local rel = world.distance(p, cameraPos())
         if rel[1] < relWindow[1]+2 then
             rel[1] = relWindow[1]+2
         elseif rel[1] > relWindow[3]-2 then
@@ -801,7 +918,7 @@ function radar(hidden,disMult)
             })
         end
         local drawable = {
-            position=rel,
+            position=vec2.add(rel,cameraOffset),
             color=c,
             fullbright=true,
             poly={
@@ -820,6 +937,9 @@ function radar(hidden,disMult)
         indicateEntity(entity.id(),{255,255,255,127},0.5)
     else
         indicatePosition(mcontroller.position(),{255,255,255,127},1,"Self","generic",0.5)
+    end
+    if referenceType == "camera" then
+        indicatePosition(distanceReferencePosition(),{255,255,255,127},1,"Camera","generic",0.5)
     end
     for k,v in next, commonUniqueEntities do
         if not v.pos then
@@ -854,7 +974,7 @@ function radar(hidden,disMult)
             numActive = numActive + 1
             local c = gonePlayerColour
             local priority = 1
-            if v.exists and interestCheck(v.pos) then
+            if v.exists and interestCheck(v.pos) or (referenceType == "player" and reference == v) then
                 c = interestNoteColour
                 priority = -1
             elseif v.enemy then
@@ -924,7 +1044,8 @@ function radar(hidden,disMult)
     if not world.players then
         table.insert(types, "player")
     end
-    local nearbyEntities = world.entityQuery(mcontroller.position(), 300, {includedTypes=types})
+    -- TODO: add world.entities binding to oSB so this isn't necessary
+    local nearbyEntities = world.entityQuery(cameraPos(), 300, {includedTypes=types})
     for k,v in next, nearbyEntities do
         if (not hadFindingType) and world.entityType(v) == radarFindingType and world.entityTypeName(v) ~= radarFinding then
         elseif not excludeEntity(v) then
@@ -981,9 +1102,10 @@ function radar(hidden,disMult)
         for k,v in next, nearbyPlayers do
             if not excludeEntity(v) then
                 playerDetected()
+                local p = updatePlayer(v)
                 local priority = -0.5
                 local colour = {0,255,255}
-                if interestCheck(world.entityPosition(v)) then
+                if interestCheck(world.entityPosition(v)) or (referenceType == "player" and reference == p) then
                     priority = -1
                     colour = interestNoteColour
                 elseif entity.isValidTarget(v) then
@@ -992,7 +1114,6 @@ function radar(hidden,disMult)
                 end
                 lineTowards(v,colour)
                 indicateEntity(v,indicAlpha(colour),priority)
-                updatePlayer(v)
             end
         end
     end
@@ -1028,7 +1149,7 @@ function radar(hidden,disMult)
             toLoad = v
         end
     end
-    if toLoad and root.getConfiguration("abyss_radarLoadingEnabled") then
+    if toLoad and root.getConfiguration("abyss_radarLoadingEnabled") and world.entity then
         ensureLoader()
         world.callScriptedEntity(blipLoaderId,"stagehand.setPosition",toLoad)
     elseif blipLoaderId then
@@ -1091,13 +1212,13 @@ function radar(hidden,disMult)
             if verbose then
                 fstr = "%.3f"
             end
-            text = string.format(fstr,world.magnitude(closestIndicated.pos,mcontroller.position()))
+            text = string.format(fstr,world.magnitude(closestIndicated.pos,distanceReferencePosition()))
             if othertype == "entity" and world.entity then
                 -- likely an entity, show info about entity
                 local e = world.entity(other)
                 local etype = e:type()
-                local rel = world.distance(e:position(), mcontroller.position())
                 text = text..string.format("\nType: %s", etype)
+                local rel = world.distance(e:position(),mcontroller.position())
                 if not namelessTypes[etype] then
                     text = text..string.format("\nName: %s", noDirectives(e:name()))
                 end
@@ -1232,7 +1353,7 @@ function radar(hidden,disMult)
             colour = {0,255,255,255}
             for k,v in next, hoveredIndications do
                 if (v.othertype == "entity" and world.entityType(v.other) == "player") or (v.othertype == "player" and v.other.exists) then
-                    local dis = world.magnitude(v.pos,mcontroller.position())
+                    local dis = world.magnitude(v.pos,distanceReferencePosition())
                     totalPos = vec2.add(totalPos,v.relPos)
                     if v.othertype == "entity" then
                         text = text..string.format("\n%s (%.1f)",noDirectives(world.entityName(v.other)),dis)
@@ -1250,7 +1371,7 @@ function radar(hidden,disMult)
             colour = hoveredIndications[1].colour
             for k,v in next, hoveredIndications do
                 if v.othertype == "player" and not v.other.exists then
-                    local dis = world.magnitude(v.pos,mcontroller.position())
+                    local dis = world.magnitude(v.pos,distanceReferencePosition())
                     totalPos = vec2.add(totalPos,v.relPos)
                     text = text..string.format("\n%s (%.1f)",noDirectives(v.other.name),dis)
                 end
@@ -1264,7 +1385,7 @@ function radar(hidden,disMult)
             size = 2
             for k,v in next, hoveredIndications do
                 if v.othertype == "interest" then
-                    local dis = world.magnitude(v.pos,mcontroller.position())
+                    local dis = world.magnitude(v.pos,distanceReferencePosition())
                     totalPos = vec2.add(totalPos,v.relPos)
                     text = text..string.format("\n%s (%.1f)",v.other,dis)
                     totalColour = vec3.add(totalColour,v.colour)
@@ -1300,6 +1421,7 @@ function radar(hidden,disMult)
         elseif textPos[1]+textWorldWidth > relWindow[3]-2 then
             textPos[1] = relWindow[3]-2-textWorldWidth
         end
+        textPos = vec2.add(textPos,cameraOffset)
         local yoff = charHeight/-2
         for k,v in next, textByLine do
             local xoff = charWidth/2

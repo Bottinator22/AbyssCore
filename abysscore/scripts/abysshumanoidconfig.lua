@@ -107,7 +107,7 @@ function updateConfigAndFlip()
 end
 
 local function keysUpdated()
-    world.sendEntityMessage(player.id(),"abyssbasic_updateLight")
+    world.sendEntityMessage(player.id(),"abyssbasic_updateConfig")
     local cfg = getAbyssConfig()
     if cfg and cfg.name then
         player.setName(cfg.name)
