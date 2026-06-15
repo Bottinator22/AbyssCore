@@ -7,9 +7,6 @@ require "/scripts/abyssutil.lua"
 -- modules are allocated into the necessary slots, they don't necessarily have to be enabled
 -- most modules can be fully set up by simply requiring them, they define the binds themselves and should by default use their own binds
 
--- TODO:
--- system for stuff that touches tech.setParentState maybe?
-
 enabledModules = {
     special=false,
     movement=false,
@@ -18,7 +15,8 @@ enabledModules = {
 presentModules = {}
 modules = {
     directives="",
-    parentState=nil
+    parentState=nil,
+    parentHidden=false
 }
 function modules.init()
     if not input then
@@ -34,6 +32,33 @@ function modules.init()
     end)
     message.setHandler("abyssModules_suppressSpecial",function(_,l)
         if l then return modules.suppressSpecial() end
+    end)
+    
+    message.setHandler("/modules",function(_,l)
+        if not l then return "nuh uh" end
+        local out = "Loaded modules:"
+        for k,m in next, presentModules do
+            local status
+            if m.passive then
+                status = "passive"
+            elseif m.enabled then
+                status = "active ("
+                local f = true
+                for s,_ in next, m.moduleSlots do
+                    if f then
+                        f = false
+                    else
+                        status = status..","
+                    end
+                    status = status..s
+                end
+                status = status..")"
+            else
+                status = "inactive"
+            end
+            out = out..string.format("\n%s (%s)",k,status)
+        end
+        return out
     end)
     
     for k,m in next, presentModules do
@@ -114,7 +139,7 @@ function modules.pressModule(m,args)
     if not m.enabled then
         modules.tryEnableModule(m)
     end
-    if m.enabled or m.passive then
+    if (m.enabled or m.passive) and m.bindPressed then
         m.bindPressed(args)
     end
 end
@@ -124,6 +149,7 @@ function modules.update(args)
     end
     modules.directives = ""
     modules.parentState = nil
+    modules.parentHidden = false
     for k,m in next, presentModules do
         m.updated = false
         local bindHeld = m.isBindHeld and m.isBindHeld(args)
@@ -142,6 +168,9 @@ function modules.update(args)
         if m.parentState then
             modules.parentState = m.parentState
         end
+        if m.parentHidden then
+            modules.parentHidden = true
+        end
         m.wasBindHeld = bindHeld
     end
     for s,m in next, enabledModules do
@@ -154,6 +183,9 @@ function modules.update(args)
     end
 end
 function modules.suppressToolUsage()
+    return enabledModules.fire and enabledModules.fire.isActive() and (not enabledModules.fire.suppressToolUsage or enabledModules.fire.suppressToolUsage())
+end
+function modules.suppressCustomFire()
     return enabledModules.fire and enabledModules.fire.isActive()
 end
 function modules.suppressMovement()
@@ -167,15 +199,33 @@ function modules.suppressSpecial()
 end
 local usingApplyFunc = false
 local lastParentState
+local lastParentHidden
+local lastToolSuppressed
+local lastDirectives
 function modules.applySuppression()
     -- applies suppression.
     -- techs should implement this their own way if they do anything that might overlap with this
-    usingApplyFunc = true
+    if not usingApplyFunc then
+        usingApplyFunc = true
+        message.setHandler("abyss_parentState",function(_,l)
+            if not l then return "nuh uh" end
+            return modules.parentState
+        end)
+    end
     local toolSuppressed = modules.suppressToolUsage()
     local moveSuppressed = modules.suppressMovement()
-    local specialSuppressed = modules.suppressSpecial()
-    tech.setToolUsageSuppressed(toolSuppressed)
-    tech.setParentDirectives(modules.directives)
+    if toolSuppressed ~= lastToolSuppressed then
+        tech.setToolUsageSuppressed(toolSuppressed)
+        lastToolSuppressed = toolSuppressed
+    end
+    if modules.directives ~= lastDirectives then
+        tech.setParentDirectives(modules.directives)
+        lastDirectives = modules.directives
+    end
+    if modules.parentHidden ~= lastParentHidden then
+        tech.setParentHidden(modules.parentHidden)
+        lastParentHidden = modules.parentHidden
+    end
     if modules.parentState ~= lastParentState then
         tech.setParentState(modules.parentState)
         lastParentState = modules.parentState

@@ -1,12 +1,11 @@
 require "/scripts/abyssmodules/modules.lua"
 
 -- module with a bunch of miscellaneous commands.
+-- also aliases some abyssgeneric commands for easier usage
 local module = {
     moduleSlots={},
     passive=true
 }
-local duckMode = false
-local walkMode = false
 
 function module.isBindHeld(args)
     return false
@@ -58,14 +57,6 @@ function module.init()
             return "Now blocking all status effects."
         end
     end)
-    message.setHandler("/duck",function(_,l)
-        if not l then return "no" end
-        duckMode = not duckMode
-    end)
-    message.setHandler("/walk",function(_,l)
-        if not l then return "no" end
-        walkMode = not walkMode
-    end)
     local function commandAlias(a,b)
         message.setHandler(a,function(_,l,...)
             if not l then return "Unauthorized" end
@@ -81,16 +72,6 @@ end
 function module.isActive()
     return false
 end
-function module.bindPressed()
-end
 function module.update(args)
-    if duckMode then
-        mcontroller.controlCrouch()
-    end
-    if walkMode then
-        mcontroller.controlModifiers({
-            runningSuppressed=true
-        })
-    end
 end
 presentModules.miscCommands = module

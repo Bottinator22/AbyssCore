@@ -589,6 +589,7 @@ Serverside player blips: %d (%d unidentified)",
     end)
     message.setHandler("/radarUnknownChars",function(_,l)
         if not l then return "no" end
+            --[[
         local out = "Unknown characters: "
         local any = false
         for k,_ in next, unknownCharSet do
@@ -603,7 +604,8 @@ Serverside player blips: %d (%d unidentified)",
             return out
         else
             return "Haven't attempted to draw any unknown characters yet."
-        end
+        end]]
+        return "TODO: this crashes the game."
     end)
     message.setHandler("/radarAutoLoad",function(_,l)
         if not l then return "no" end
@@ -933,6 +935,7 @@ function radar(hidden,disMult)
     local function indicAlpha(c)
         return {c[1],c[2],c[3],(c[4] or 255)/2}
     end
+    lineTowardsPos(mcontroller.position(),{255,255,255},1)
     if verbose then
         indicateEntity(entity.id(),{255,255,255,127},0.5)
     else

@@ -7,6 +7,8 @@ local function mergeConfigs(iocfg,key)
             iocfg = mergeConfigs(iocfg,cfg.parent)
         end
         iocfg = sb.jsonMerge(iocfg,cfg)
+        iocfg.base = sb.jsonMerge(iocfg.base or {}, sb.jsonMerge(cfg.both or {},cfg.base or {}))
+        iocfg.flip = sb.jsonMerge(iocfg.flip or {}, sb.jsonMerge(cfg.both or {},cfg.flip or {}))
     end
     return iocfg
 end
@@ -90,16 +92,9 @@ function updateConfigAndFlip()
             else
                 identityOverride = cfg.base
             end
-            if cfg.both then
-                if identityOverride then
-                    identityOverride = sb.jsonMerge(cfg.both,identityOverride)
-                else
-                    identityOverride = cfg.both
-                end
-            end
         end
         if identityOverride then
-            player.setHumanoidIdentity(sb.jsonMerge(player.humanoidIdentity(),identityOverride))
+            player.setHumanoidIdentity(sb.jsonMerge(player.getProperty("abyss_origIdentity"),identityOverride))
         end
     end
     lastConfigName = configName
@@ -107,11 +102,13 @@ function updateConfigAndFlip()
 end
 
 local function keysUpdated()
-    world.sendEntityMessage(player.id(),"abyssbasic_updateConfig")
+    lastMergedConfigName = nil
+    lastConfigName = nil
     local cfg = getAbyssConfig()
     if cfg and cfg.name then
         player.setName(cfg.name)
     end
+    world.sendEntityMessage(player.id(),"abyssbasic_updateConfig")
 end
 
 function initConfigKeyCommands()
@@ -173,7 +170,7 @@ function initConfigKeyCommands()
             key = split[1]
             value = split[2]
         else
-            return "Need a key and a priority or value."
+            key = split[1]
         end
         player.setHumanoidIdentity(player.getProperty("abyss_origIdentity"))
         if value and tonumber(value) then
@@ -210,8 +207,6 @@ function initConfigKeyCommands()
     message.setHandler("/abyssRefreshConfig",function(_,l)
         if not l then return end
         keysUpdated()
-        lastMergedConfigName = nil
-        lastConfigName = nil
     end)
     keysUpdated()
 end

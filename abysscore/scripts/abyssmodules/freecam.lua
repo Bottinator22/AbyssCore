@@ -36,6 +36,7 @@ function module.isActive()
     return stagehandExists()
 end]]
 module.isActive = stagehandExists
+freecamModule = module
 function module.bindPressed()
     setEnabled(not stagehandExists())
 end
@@ -55,6 +56,13 @@ function module.updateEnabled(args)
         if args.moves.up    then pos[2] = pos[2] + s end
         if args.moves.down  then pos[2] = pos[2] - s end
         
+        world.callScriptedEntity(freecamStagehand,"stagehand.setPosition",pos)
+    end
+end
+function module.cameraToPos(pos)
+    modules.enableModule(module)
+    setEnabled(true)
+    if stagehandExists() then
         world.callScriptedEntity(freecamStagehand,"stagehand.setPosition",pos)
     end
 end

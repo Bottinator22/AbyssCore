@@ -1,19 +1,20 @@
 {
   "abysscore": {
     "groups": {
-      "actions": { "name": "Tech-specific Actions" }
+      "common": { "name": "Common" },
+      "uncommon": { "name": "Uncommon" }
     },
     "name": "Abyss Core",
     "binds": {
       "blink": {
         "default": [],
-        "group": "actions",
+        "group": "common",
         "name": "Blink/Teleport",
         "tags": ["blink"]
       },
       "face": {
         "default": [],
-        "group": "actions",
+        "group": "common",
         "name": "Face Cursor",
         "tags": ["facing"]
       },
@@ -22,23 +23,33 @@
           "type" : "key",
           "value" : "o"
         }],
-        "group": "actions",
+        "group": "common",
         "name": "Toggle Command Mode"
       },
       "toggleRadar": {
         "default": [],
-        "group": "actions",
+        "group": "common",
         "name": "Cycle Radar Mode"
-      },
-      "toggleArmatureEdit": {
-        "default": [],
-        "group": "actions",
-        "name": "Toggle Armature Editor"
       },
       "toggleFreecam": {
         "default": [],
-        "group": "actions",
-        "name": "Cycle Freecam"
+        "group": "common",
+        "name": "Toggle Freecam"
+      },
+      "toggleArmatureEdit": {
+        "default": [],
+        "group": "uncommon",
+        "name": "Toggle Armature Editor"
+      },
+      "toggleInvisible": {
+        "default": [],
+        "group": "uncommon",
+        "name": "Toggle Invisibility"
+      },
+      "explode": {
+        "default": [],
+        "group": "uncommon",
+        "name": "Explode"
       }
     }
   }

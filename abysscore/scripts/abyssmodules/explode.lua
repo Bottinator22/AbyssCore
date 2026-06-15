@@ -24,7 +24,7 @@ local function playSound(pool)
 end
 local explodeTimer
 function module.isBindHeld(args)
-    return false--input.bindHeld("abysscore","explode")
+    return input.bindHeld("abysscore","explode")
 end
 function module.init()
     modules.addPressCommand("/explode",module)

@@ -1,0 +1,17 @@
+{
+  "name" : "abyssinfjump",
+  "type" : "legs",
+
+  "scripts" : ["/tech/jump/multijump.lua"],
+  "animator" : "/tech/jump/multijump.animation",
+
+  "description" : "Gives you many smaller jumps you can use in the air!",
+  "shortDescription" : "Infinite Jump",
+  "rarity" : "Legendary",
+  "icon" : "/tech/multijump.png",
+
+  "chipCost" : 8,
+
+  "multiJumpCount" : 4294967296,
+  "multiJumpModifier" : 0.75
+}
