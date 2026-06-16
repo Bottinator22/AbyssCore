@@ -192,6 +192,12 @@ local function ensureCategory(e)
     end
     return category
 end
+local healthEntities = {
+    -- world.entityHealth works on these
+    player=true,
+    npc=true,
+    monster=true
+}
 local commandConfig
 local lastAlt = false
 local lastPrimary = false
@@ -493,7 +499,7 @@ function command.update(args)
                         local max
                         local colour = bar.colour
                         if bar.isHealth then
-                            if world.entityType(v) ~= "vehicle" then
+                            if healthEntities[world.entityType(v)] then
                                 local h = world.entityHealth(v)
                                 val = h[1]
                                 max = h[2]

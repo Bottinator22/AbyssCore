@@ -9,6 +9,10 @@ local function mergeConfigs(iocfg,key)
         iocfg = sb.jsonMerge(iocfg,cfg)
         iocfg.base = sb.jsonMerge(iocfg.base or {}, sb.jsonMerge(cfg.both or {},cfg.base or {}))
         iocfg.flip = sb.jsonMerge(iocfg.flip or {}, sb.jsonMerge(cfg.both or {},cfg.flip or {}))
+        if cfg.name then
+            iocfg.base.name = cfg.name
+            iocfg.flip.name = cfg.name
+        end
     end
     return iocfg
 end
@@ -104,10 +108,6 @@ end
 local function keysUpdated()
     lastMergedConfigName = nil
     lastConfigName = nil
-    local cfg = getAbyssConfig()
-    if cfg and cfg.name then
-        player.setName(cfg.name)
-    end
     world.sendEntityMessage(player.id(),"abyssbasic_updateConfig")
 end
 

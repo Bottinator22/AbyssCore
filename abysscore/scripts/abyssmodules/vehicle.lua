@@ -1,6 +1,7 @@
 require "/scripts/abyssmodules/modules.lua"
 
 -- does nothing, but forces other modules to yield to vehicle controls
+-- TODO: restrict movement modules when in objects too, since moving AT ALL in an object even when suppressed kicks you out
 local module = {
     moduleSlots={
         fire=true,

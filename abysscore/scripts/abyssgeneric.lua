@@ -33,6 +33,25 @@ local spawnableMinionTypes = {
     shield="^#ff00ff;",
 }
 
+local function heldItem()
+    local swap = player.swapSlotItem()
+    local i = player.primaryHandItem() or swap
+    if not i then
+        local is = player.selectedActionBarSlot()
+        if is then
+            if type(is) == "number" then
+                local il = player.actionBarSlotLink(is, "primary") or player.actionBarSlotLink(is, "alt")
+                if il then
+                    i = player.item(il)
+                end
+            else
+                i = player.essentialItem(is)
+            end
+        end
+    end
+    return i
+end
+
 function init()
     if not threads then
         script.setUpdateDelta(0)
@@ -162,6 +181,25 @@ function init()
             end
             return string.sub(str,0,-3).."."
         end
+    end)
+    message.setHandler("/abyssComItem", function(_,l,c) 
+        if not l then
+            return "Unauthorized"
+        end
+        local i = heldItem()
+        if not i then
+            return "Need an item."
+        end
+        if not i.parameters then
+            i.parameters = {}
+        end
+        if not i.parameters.itemDrop then
+            i.parameters.itemDrop = {}
+        end
+        i.parameters.itemDrop.clientEntityMode = "clientMasterAllowed"
+        i.parameters.itemDrop.scripts = {"/scripts/abysscommandableitemdrop.lua"}
+        player.giveItem(i)
+        return "Gave a commandable item. Try throwing it."
     end)
     message.setHandler("/abyssPersonality", function(_,l,c) 
         if not l then
@@ -310,6 +348,7 @@ function init()
         if not isLocal then return end
         if storage.headPlatform and world.entityExists(storage.headPlatform) then
             world.callScriptedEntity(storage.headPlatform,"vehicle.destroy")
+            storage.headPlatform = nil
             return "Destroying head platform."
         else
             storage.headPlatform = buildHeadPlatform()
@@ -334,8 +373,8 @@ function init()
     end
 end
 function update(dt)
-    if storage.headPlatform and world.entityExists(storage.headPlatform) then -- player.headRotation was added in same commit as postUpdate
-        if not player.headRotation then
+    if storage.headPlatform and world.entityExists(storage.headPlatform) then
+        if not player.headRotation then -- player.headRotation was added in same commit as postUpdate
             world.callScriptedEntity(storage.headPlatform,"updatePos")
         end
         world.callScriptedEntity(storage.headPlatform,"keepAlive")
