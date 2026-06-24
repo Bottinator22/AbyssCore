@@ -6,13 +6,14 @@ require "/scripts/abyssradar.lua"
 local module = {
     moduleSlots={},
     passive=true,
-    enableMoveKey=nil
+    enableMoveKey=nil,
+    enableMoveKey_shift=nil
 }
 local radarMode = 1
 radarModule = module
 local m = module
 function module.isBindHeld(args)
-    return input.bindHeld("abysscore","toggleRadar") or (m.enableMoveKey and args.moves[m.enableMoveKey] and not modules.suppressSpecial())
+    return safeBindHeld("abysscore","toggleRadar") or (m.enableMoveKey and args.moves[m.enableMoveKey] and (m.enableMoveKey_shift == nil or ((not args.moves.run) == m.enableMoveKey_shift)) and not modules.suppressSpecial())
 end
 function module.init()
     radarInit()

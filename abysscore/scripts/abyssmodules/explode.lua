@@ -24,7 +24,7 @@ local function playSound(pool)
 end
 local explodeTimer
 function module.isBindHeld(args)
-    return input.bindHeld("abysscore","explode")
+    return safeBindHeld("abysscore","explode")
 end
 function module.init()
     modules.addPressCommand("/explode",module)
@@ -55,6 +55,7 @@ function module.update(args)
                     type = "enemy",
                     team = 9001
                     }]]
+                    damageTeam = entity.damageTeam()
                 }
                 world.spawnProjectile("mechexplosion", mcontroller.position(), nil, nil, false, params)
                 playSound({"/sfx/tech/mech_explosion.ogg"})

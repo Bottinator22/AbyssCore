@@ -24,7 +24,7 @@ local function setEnabled(mode)
     end
 end
 function module.isBindHeld(args)
-    return input.bindHeld("abysscore","toggleFreecam")
+    return safeBindHeld("abysscore","toggleFreecam")
 end
 function module.init()
     modules.addPressCommand("/freecam",module)

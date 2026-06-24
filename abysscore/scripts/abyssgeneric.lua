@@ -1,5 +1,6 @@
 require "/scripts/abysshumanoidconfig.lua"
 require "/scripts/terra_vec2ref.lua"
+require "/scripts/terra_proxy.lua"
 
 local pingTestPlayers
 local utilThread
@@ -32,6 +33,8 @@ local spawnableMinionTypes = {
     analysis="^#00ffff;",
     shield="^#ff00ff;",
 }
+
+local sineTest
 
 local function heldItem()
     local swap = player.swapSlotItem()
@@ -453,4 +456,6 @@ function postUpdate()
     if status.resource("health") <= 0 then
         world.sendEntityMessage(player.id(),"abyss_dead")
     end
+    -- TODO: send more than one of these messages, optionally
+    world.sendEntityMessage(player.id(),"abyss_postUpdate")
 end

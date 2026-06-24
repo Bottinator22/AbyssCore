@@ -25,6 +25,10 @@ local function ensureLoader()
     world.callScriptedEntity(blipLoaderId,"keepAlive")
 end
 
+local function isPuppet()
+    return entity.entityType() ~= "player"
+end
+
 local doGTWarn = true
 local function getGenericTime()
     if threads then
@@ -75,7 +79,7 @@ local function getLocalAnimator()
 end
 local lastHadPlayer = 0
 local function playerDetected()
-    if getGenericTime()-lastHadPlayer > 2 then
+    if getGenericTime()-lastHadPlayer > 2 and not isPuppet() then
         local localAnimator = getLocalAnimator()
         if not localAnimator then
             return
@@ -123,7 +127,7 @@ function newUniqueEColour()
     local i = ((interestN-1)%n)+1
     return colours[i]
 end
-local queryLimitMin = 5
+local queryLimitMin = 1
 local queryLimitMax = 10
 local queryLimit = queryLimitMax
 local playerPositionsToRender = {}
@@ -288,6 +292,9 @@ end
 local scannerPunchyParams
 function radarInit()
     if not player then
+        return
+    end
+    if isPuppet() then
         return
     end
     scannerPunchyParams = sb.jsonMerge(root.assetJson("/scripts/abyssScannerParams.json"), {ownerId=entity.id()})
@@ -783,7 +790,16 @@ local collisionTypes = {
     object=true
 }
 local interestNoteDistance = 5
+local selfNoteDistance = 20
+local cameraNoNoteDistance = 100
 function interestCheck(p)
+    local cpos = (camera.position or mcontroller.position)()
+    local mpos = mcontroller.position()
+    local cdis = world.magnitude(p,cpos)
+    local mdis = world.magnitude(p,mpos)
+    if mdis < selfNoteDistance and cdis > cameraNoNoteDistance then
+        return true
+    end
     for k,v in next, interests do
         if v[3] == player.worldId() then
             if v[4].box then
@@ -804,6 +820,9 @@ function radarSetVerbose(v)
     verbose = v
 end
 function radar(hidden,disMult)
+    if isPuppet() then
+        return
+    end
     if not initialized then
         --sb.logWarn("Radar was not initialized! Initializing late.")
         radarInit()

@@ -105,10 +105,34 @@ function updateConfigAndFlip()
     lastFacing = facing
 end
 
+local function updateOther()
+    local cfg = getAbyssConfig() or {}
+    local glow = cfg.lightColour or player.getProperty("abyss_lightColour",{0,0,0})
+    if glow[1] == 0 and glow[2] == 0 and glow[3] == 0 then
+        status.clearPersistentEffects("abyssglow")
+    else
+        if #status.getPersistentEffects("abyssglow") == 0 then
+            status.setPersistentEffects("abyssglow",{"abysscore_glow"})
+        end
+        world.sendEntityMessage(entity.id(),"abyssglow_updateConfig")
+    end
+    if cfg.techs then
+        for k,v in next, cfg.techs do
+            if v then
+                player.makeTechAvailable(v)
+                player.enableTech(v)
+                player.equipTech(v)
+            elseif player.equippedTech(k) then
+                player.unequipTech(player.equippedTech(k))
+            end
+        end
+    end
+end
+
 local function keysUpdated()
     lastMergedConfigName = nil
     lastConfigName = nil
-    world.sendEntityMessage(player.id(),"abyssbasic_updateConfig")
+    updateOther()
 end
 
 function initConfigKeyCommands()
@@ -202,6 +226,33 @@ function initConfigKeyCommands()
             else
                 return string.format("Set config key %s to '%s'. Nothing defined at this key.",key,value)
             end
+        end
+    end)
+    message.setHandler("/setGlow", function(_,l,c) 
+        if not l then
+            return "Unauthorized"
+        end
+        local split = {}
+        for v in string.gmatch(c,"([^ ]+)") do
+            local n = tonumber(v)
+            if not n then
+                return string.format("'%s' is not a number",v)
+            end
+            table.insert(split, n)
+        end
+        local k = player.getProperty("abyss_configKey")
+        local cfg = getAbyssConfig()
+        if cfg and cfg.lightColour then
+            return "Cannot override glow; a config is setting glow already"
+        else
+            if #split < 3 then
+                player.setProperty("abyss_lightColour",{0,0,0})
+                updateGlow()
+                return "Reset glow."
+            end
+            player.setProperty("abyss_lightColour",split)
+            updateGlow()
+            return "Set glow."
         end
     end)
     message.setHandler("/abyssRefreshConfig",function(_,l)

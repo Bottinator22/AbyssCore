@@ -1,6 +1,9 @@
 require "/scripts/terra_armature/armature.lua"
 
 editableBones = {}
+function armature_editable()
+    return true
+end
 function editable_extraBoneUnselectable(bone,bonecfg,withChildren)
     return false
 end
@@ -9,17 +12,16 @@ local function processBone(bone)
     if cfg.unselectable or bone.dummyKeys or bone.inactive or editable_extraBoneUnselectable(bone,cfg,true) then
         return
     end
-    if not (editable_extraBoneUnselectable(bone,cfg,false)) and not cfg.exclusiveUnselectable then
-        bone.editorData = {
-            worldPos={0,0},
-            rotation=0,
-            offset={0,0},
-            scale={1,1},
-            overridden=false,
-            ikLeaveRot=cfg.ikLeaveRot
-        }
-        editableBones[bone.name] = bone
-    end
+    bone.editorData = {
+        worldPos={0,0},
+        rotation=0,
+        offset={0,0},
+        scale={1,1},
+        overridden=false,
+        unselectable=editable_extraBoneUnselectable(bone,cfg,false) or cfg.exclusiveUnselectable,
+        ikLeaveRot=cfg.ikLeaveRot
+    }
+    editableBones[bone.name] = bone
     for k,v in next, bone.children do
         processBone(v)
     end
@@ -87,6 +89,7 @@ function editableApply()
     end
 end
 callbacks = {
+    armature_editable=armature_editable,
     editable_getFacing=editable_getFacing,
     editable_updateBone=editable_updateBone,
     editable_getEditableBones=editable_getEditableBones,

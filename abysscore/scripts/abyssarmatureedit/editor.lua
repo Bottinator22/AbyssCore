@@ -458,20 +458,22 @@ function armatureedit.update(args)
     else
         local bones = contactEntity("editable_getEditableBones")
         for k,v in next, bones do
-            local colour = renderutil.namedColour(v.debugColour)
-            local point = generatePointDrawable_absolute(v.editorData.worldPos,0.125)
-            point.color = colour
-            if v.editorData.overridden then
-                point.color = overriddenColour
-            end
-            point.fullbright = true
-            localAnimator.addDrawable(point,"Overlay+31901")
-            if v.parent then
-                local line = generateLineDrawable_absolute(v.editorData.worldPos,v.parent.editorData.worldPos)
-                line.color = colour
-                line.fullbright = true
-                line.width = 1
-                localAnimator.addDrawable(line,"Overlay+31900")
+            if not v.editorData.unselectable then
+                local colour = renderutil.namedColour(v.debugColour)
+                local point = generatePointDrawable_absolute(v.editorData.worldPos,0.125)
+                point.color = colour
+                if v.editorData.overridden then
+                    point.color = overriddenColour
+                end
+                point.fullbright = true
+                localAnimator.addDrawable(point,"Overlay+31901")
+                if v.parent then
+                    local line = generateLineDrawable_absolute(v.editorData.worldPos,v.parent.editorData.worldPos)
+                    line.color = colour
+                    line.fullbright = true
+                    line.width = 1
+                    localAnimator.addDrawable(line,"Overlay+31900")
+                end
             end
         end
         local modeHasPrimary = false
@@ -513,10 +515,12 @@ function armatureedit.update(args)
             local closest = nil
             local closestDis = 0.5
             for k,v in next, bones do
-                local dis = world.magnitude(aimPos,v.editorData.worldPos)
-                if dis < closestDis then
-                    closest = k
-                    closestDis = dis
+                if not v.editorData.unselectable then
+                    local dis = world.magnitude(aimPos,v.editorData.worldPos)
+                    if dis < closestDis then
+                        closest = k
+                        closestDis = dis
+                    end
                 end
             end
             if closest then

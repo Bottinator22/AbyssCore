@@ -1,6 +1,7 @@
 require "/scripts/abyssmodules/modules.lua"
 require "/scripts/abyssarmatureedit/editor.lua"
 
+-- armature editor module, targets the nearest editable entity
 local module = {
     moduleSlots={
         special=true,
@@ -12,11 +13,14 @@ local editor = false
 local function setEnabled(mode)
     if editor ~= mode then
         if mode then
-            if not module.entity then
-                sb.logWarn("Attempted to enable armature editor module with no armature entity to edit!")
+            local e = world.entityQuery(tech.aimPosition(),300,{callScript="armature_editable",order="nearest"})[1] or module.entity
+            if not e or not world.entityExists(e) then
+                localAnimator.playAudio("/sfx/interface/clickon_error.ogg")
+                module.entity = nil
             else
                 editor = true
-                armatureedit.init(module.entity)
+                module.entity = e
+                armatureedit.init(e)
             end
         else
             editor = false
@@ -26,7 +30,7 @@ local function setEnabled(mode)
 end
 armatureEditModule = module
 function module.isBindHeld(args)
-    return input.bindHeld("abysscore","toggleArmatureEdit")
+    return safeBindHeld("abysscore","toggleArmatureEdit")
 end
 function module.enable()
 end

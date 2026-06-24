@@ -14,7 +14,7 @@ local module = {
     passive=true
 }
 function module.isBindHeld(args)
-    return input.bindHeld("abysscore","blink")
+    return safeBindHeld("abysscore","blink")
 end
 function module.init()
     radarInit()
@@ -28,7 +28,7 @@ function module.bindPressed()
     onTeleport(tech.aimPosition())
 end
 function module.update(args)
-    if input.bindHeld("abysscore","face") then
+    if safeBindHeld("abysscore","face") then
         local dis = world.distance(tech.aimPosition(),mcontroller.position())
         local f = 1
         if dis[1] < 0 then

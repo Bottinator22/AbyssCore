@@ -7,6 +7,10 @@ require "/scripts/abyssutil.lua"
 -- modules are allocated into the necessary slots, they don't necessarily have to be enabled
 -- most modules can be fully set up by simply requiring them, they define the binds themselves and should by default use their own binds
 
+function safeBindHeld(...)
+    return input and input.bindHeld(...)
+end
+
 enabledModules = {
     special=false,
     movement=false,
@@ -19,10 +23,8 @@ modules = {
     parentHidden=false
 }
 function modules.init()
-    if not input then
-        return
-    end
     ensureBasicProxies()
+    mcontroller.setAutoClearControls(true)
     -- message handlers for interaction by other techs and items
     message.setHandler("abyssModules_suppressToolUsage",function(_,l)
         if l then return modules.suppressToolUsage() end
@@ -144,7 +146,7 @@ function modules.pressModule(m,args)
     end
 end
 function modules.update(args)
-    if not input or not ensureBasicProxies() then
+    if not ensureBasicProxies() then
         return
     end
     modules.directives = ""

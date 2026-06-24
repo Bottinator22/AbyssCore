@@ -1,0 +1,11 @@
+{
+  "name" : "abysscore_glow",
+  "effectConfig" : {},
+  "defaultDuration" : 10,
+  
+  "animationConfig" : "/stats/effects/glow/glow.animation",
+
+  "scripts" : [
+    "abyssglow.lua"
+  ]
+}

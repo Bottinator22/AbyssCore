@@ -3,7 +3,6 @@
   "type" : "body",
 
   "scripts" : ["/scripts/abyssbasictech/tech.lua"],
-  "animator" : "/stats/effects/glow/glow.animation",
 
   "ignoreSpecial": false,
   "description" : "A simple tech that makes use of Abyss Core features. Not designed for normal gameplay. Uses special keys.",

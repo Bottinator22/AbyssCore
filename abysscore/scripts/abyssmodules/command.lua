@@ -21,7 +21,7 @@ commandModule = {
 }
 local m = commandModule
 function commandModule.isBindHeld(args)
-    return input.bindHeld("abysscore","toggleCommand") or (m.enableMoveKey and args.moves[m.enableMoveKey])
+    return safeBindHeld("abysscore","toggleCommand") or (m.enableMoveKey and args.moves[m.enableMoveKey])
 end
 function commandModule.enable()
 end
