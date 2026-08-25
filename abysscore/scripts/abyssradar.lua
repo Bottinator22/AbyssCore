@@ -6,21 +6,27 @@ require "/scripts/terra_proxy.lua"
 require "/scripts/rect.lua"
 require "/scripts/poly.lua"
 
+require "/scripts/abyssradar_interests.lua"
+require "/scripts/abyssradar_portals.lua"
+require "/scripts/abyssradar_recog.lua"
+
 -- note: world time is used for 'last seen' numbers. this is somewhat inaccurate.
 -- TODO: check for serverside player blips, in case a server spawns server master player entities
 
-local interests = {}
 local font
 local playerPositionPromises = {}
 local serverPlayerPositions = {}
 local unknownCharSet = {}
 
+local fUENotWorking = false
+
+local promiseTimeout = 30
+
 local blipLoaderId
 
 local function ensureLoader()
     if not blipLoaderId or not world.entityExists(blipLoaderId) then
-        local params = root.assetJson("/scripts/abyssRadarLoaderParams.json")
-        blipLoaderId = world.spawnStagehand(mcontroller.position(),"mailbox",params)
+        blipLoaderId = world.spawnStagehand(mcontroller.position(),"abyss_radarLoader")
     end
     world.callScriptedEntity(blipLoaderId,"keepAlive")
 end
@@ -71,24 +77,13 @@ local function excludeEntity(e)
     end
     return false
 end
-local function getLocalAnimator()
+local function ensureLocalAnimator()
     if not localAnimator then
         localAnimator = terra_proxy.setupProxy("localAnimator",entity.id())
     end
-    return localAnimator or getmetatable''.localAnimator
+    return localAnimator
 end
-local lastHadPlayer = 0
-local function playerDetected()
-    if getGenericTime()-lastHadPlayer > 2 and not isPuppet() then
-        local localAnimator = getLocalAnimator()
-        if not localAnimator then
-            return
-        end
-        localAnimator.playAudio(root.getConfiguration("abyss_radarPingSound") or "/sfx/interface/ship_confirm2.ogg", 0, root.getConfiguration("abyss_radarPingSoundVol") or 2)
-    end
-    lastHadPlayer = getGenericTime()
-end
-local colours = {
+radarColours = {
     {255,0,0},
     {0,0,255},
     {0,255,0},
@@ -101,15 +96,7 @@ local colours = {
     {0,255,127},
     {127,255,0}
 }
-function newInterestColour()
-    local interestN = 0
-    for k,v in next, interests do
-        interestN = interestN + 1
-    end
-    local n = #colours
-    local i = ((interestN-1)%n)+1
-    return colours[i]
-end
+local colours = radarColours
 local pingTimescale = 1
 local lastPing = 0
 local commonUniqueEntities={
@@ -141,15 +128,19 @@ local function connectionId(eid)
     if eid >= 0 then
         return 0 -- server
     else
-        return -math.floor(eid/65536)+1 -- client
+        return -math.floor(eid/65536) -- client
     end
 end
 local function connectionKey(cid)
     return string.format("c_%d",cid)
 end
+local minCID = 1
+local minSWCID = 16384
 local function connectionName(cid)
     if cid == 0 then
         return "Server"
+    elseif cid >= minSWCID and universe and universe.serverOpenProtocolVersion and universe.serverOpenProtocolVersion() >= 16 then
+        return connectionName(cid-minSWCID+minCID).." (Subworld)"
     else
         return connectionNames[connectionKey(cid)] or "Unknown"
     end
@@ -167,6 +158,42 @@ local function distanceReferencePosition()
         return mcontroller.position()
     end
 end
+local lastHadPlayer = 0
+local lastHadNearbyPlayer = 0
+local function playerDetected(pos)
+    if not root.getConfiguration then
+        return
+    end
+    if isPuppet() then
+        return
+    end
+    local minSpacing = (root.getConfiguration("abyss_radarPingSoundMinSpacing") or 10)
+    if getGenericTime()-lastHadPlayer > minSpacing then
+        if fUENotWorking and root.getConfiguration("abyss_radarLoadingEnabled") then
+            return -- avoid spamming ears
+        end
+        if not localAnimator then
+            return
+        end
+        localAnimator.playAudio(root.getConfiguration("abyss_radarPingSound") or "/sfx/interface/ship_confirm2.ogg", 0, root.getConfiguration("abyss_radarPingSoundVol") or 2)
+    end
+    lastHadPlayer = getGenericTime()
+    if world.magnitude(pos,distanceReferencePosition()) < (root.getConfiguration("abyss_radarPingNearbyDistance") or 300) then
+        if getGenericTime()-lastHadNearbyPlayer > (root.getConfiguration("abyss_radarPingSoundMinSpacing") or 10) then
+            if fUENotWorking and root.getConfiguration("abyss_radarLoadingEnabled") then
+                return -- avoid spamming ears
+            end
+            if not localAnimator then
+                return
+            end
+            localAnimator.playAudio(root.getConfiguration("abyss_radarPingNearbySound") or "/sfx/interface/rocket_lockon.ogg", 0, root.getConfiguration("abyss_radarPingNearbySoundVol") or (root.getConfiguration("abyss_radarPingSoundVol") or 2)*0.75)
+        end
+        lastHadNearbyPlayer = getGenericTime()
+    end
+end
+radarDistanceReferencePosition = distanceReferencePosition
+local lastTimedOut = 0
+local lastNotTimedOut = 0
 local function updatePlayerPosPromise(k,v,isLive)
     local promise = playerPositionPromises[k]
     local sameWorld = v.worldId == player.worldId()
@@ -178,11 +205,16 @@ local function updatePlayerPosPromise(k,v,isLive)
         -- world time went backwards.
         v.lastChecked = 0
     end
-    if v.lastSeen and v.lastSeen > world.time()+3 then
-        v.lastSeen = nil
-    end
     if promise then
-        if promise:finished() then
+        if promise:finished() or world.time()-v.lastChecked > promiseTimeout then
+            if world.time()-v.lastChecked > promiseTimeout then
+                --chat.addMessage(string.format("Radar query for %s timed out",v.name))
+                lastTimedOut = getGenericTime()
+                fUENotWorking = lastTimedOut > lastNotTimedOut+10
+            else
+                lastNotTimedOut = getGenericTime()
+                fUENotWorking = false
+            end
             if promise:succeeded() then
                 local npos = promise:result()
                 v.pos[1] = npos[1]
@@ -190,7 +222,7 @@ local function updatePlayerPosPromise(k,v,isLive)
                 v.exists = true
                 v.worldId = player.worldId()
                 v.old = false
-                v.lastSeen = world.time()
+                v.lastSeen = os.time()
             elseif v.worldId == player.worldId() then
                 v.exists = false
             end
@@ -213,13 +245,6 @@ local playerPositionUpdater
 local initialized = false
 local radarFinding
 local radarFindingType
-local function saveInterests()
-    if root.setConfiguration then
-        root.setConfiguration("abyss_radarInterests",interests)
-    else
-        player.setProperty("radarInterests",interests)
-    end
-end
 function radarPlayerPositions(positions)
     if #positions % 1 == 1 then
         sb.logWarn("Player position list is incorrect!")
@@ -263,7 +288,7 @@ local function playerByPartialName(n)
     local num = 0
     local out
     for k,v in next, storage.radarPlayerPositions do
-        if v.worldId == player.worldId() and string.sub(string.lower(removeDirectives(v.name)),1,#sn) == sn then
+        if v.worldId == player.worldId() and v.exists and string.sub(string.lower(removeDirectives(v.name)),1,#sn) == sn then
             out = v
             num = num + 1
         end
@@ -272,10 +297,10 @@ local function playerByPartialName(n)
         -- try again with case sensitivity
         out = nil
         num = 0
-        sn = string.lower(removeDirectives(n))
+        sn = removeDirectives(n)
         
         for k,v in next, storage.radarPlayerPositions do
-            if v.worldId == player.worldId() and string.sub(removeDirectives(v.name),1,#sn) == sn then
+            if v.worldId == player.worldId() and v.exists and string.sub(removeDirectives(v.name),1,#sn) == sn then
                 out = v
                 num = num + 1
             end
@@ -289,6 +314,7 @@ local function playerByPartialName(n)
     end
     return out
 end
+radarFindPlayer = playerByPartialName
 local scannerPunchyParams
 function radarInit()
     if not player then
@@ -305,186 +331,13 @@ function radarInit()
             end
         end
     end
-    interests = (root.getConfiguration and root.getConfiguration("abyss_radarInterests")) or player.getProperty("radarInterests") or {}
-    if root.getConfiguration then
-        local pri = player.getProperty("radarInterests")
-        if pri then
-            for k,v in next, pri do
-                interests[k] = v
-            end
-            player.setProperty("radarInterests",nil)
-            saveInterests()
-        end
-    end
     message.setHandler("abyssPlayerPositions", function (_,l,...)
         -- note: could theoretically be jammed or broken
         local positions = {...}
         radarPlayerPositions(positions)
     end)
-    message.setHandler("/radarInterestColour",function(_,l,c)
-        if not l then return "no" end
-        local split = {}
-        for v in string.gmatch(c,"([^ ]+)") do
-            table.insert(split, v)
-        end
-        if #split < 4 then
-            return "Usage: /radarInterestColour <interest> <R> <G> <B> [A]"
-        end
-        local interest = interests[split[1]]
-        if not interest then
-            return "No interest detected with that name."
-        end
-        interest[4].colour = {tonumber(split[2]),tonumber(split[3]),tonumber(split[4]),split[5] and tonumber(split[5])}
-        interests[split[1]] = interest
-        saveInterests()
-        return string.format("Recoloured interest %s",split[1])
-    end)
-    message.setHandler("/radarCreateInterest",function(_,l,c)
-        if not l then return "no" end
-        local split = {}
-        for v in string.gmatch(c,"([^ ]+)") do
-            table.insert(split, v)
-        end
-        if #split == 0 or #c == 0 then
-            return "Usage: /radarCreateInterest <interest>"
-        end
-        if #split > 1 then
-            return "Interest name cannot have spaces."
-        end
-        local exists = not not interests[c]
-        local old = interests[c]
-        local interest = mcontroller.position()
-        interest[3] = player.worldId()
-        interest[4] = old and old[4] or {
-            colour=newInterestColour()
-        }
-        interests[c] = interest
-        saveInterests()
-        return string.format("%s interest %s",exists and "Moved" or "Created",c)
-    end)
-    message.setHandler("/radarRemoveInterest",function(_,l,c)
-        if not l then return "no" end
-        local split = {}
-        for v in string.gmatch(c,"([^ ]+)") do
-            table.insert(split, v)
-        end
-        if #split == 0 or #c == 0 then
-            return "Usage: /radarRemoveInterest <interest>"
-        end
-        if #split > 1 then
-            return "Interest name cannot have spaces."
-        end
-        if not interests[c] then
-            return "No interest detected with that name."
-        end
-        interests[c] = nil
-        saveInterests()
-        return string.format("Deleted interest %s",c)
-    end)
-    message.setHandler("/radarGotoInterest",function(_,l,c)
-        if not l then return "no" end
-        local split = {}
-        for v in string.gmatch(c,"([^ ]+)") do
-            table.insert(split, v)
-        end
-        if #split == 0 or #c == 0 then
-            return "Usage: /radarGotoInterest <interest>"
-        end
-        if #split > 1 then
-            return "Interest name cannot have spaces."
-        end
-        if not interests[c] then
-            return "No interest detected with that name."
-        end
-        local interest = interests[c]
-        if interest[3] == player.worldId() then
-            mcontroller.setPosition(interest)
-            mcontroller.setVelocity({0,0})
-            return string.format("Teleported to interest %s",c)
-        else
-            player.warp(string.format("%s=%d.%d",interest[3],math.floor(interest[1]),math.floor(interest[2])))
-            return string.format("Warping to interest %s",c)
-        end
-    end)
-    message.setHandler("/radarInterestRadius",function(_,l,c)
-        if not l then return "no" end
-        local split = {}
-        for v in string.gmatch(c,"([^ ]+)") do
-            table.insert(split, v)
-        end
-        if #split < 1 or #c == 0 then
-            return "Usage: /radarInterestRadius <interest> [radius]"
-        end
-        if #split > 2 then
-            return "Interest name cannot have spaces."
-        end
-        local i = split[1]
-        local interest = interests[i]
-        if not interest then
-            return "No interest detected with that name."
-        end
-        if split[2] then
-            local n = tonumber(split[2])
-            if not n then
-                return "Could not parse radius."
-            end
-            interest[4].radius = n
-            saveInterests()
-            return string.format("Set interest %s radius to %.1f.",i,n)
-        else
-            interest[4].radius = nil
-            saveInterests()
-            return string.format("Reset interest %s radius.",i)
-        end
-    end)
-    message.setHandler("/radarInterestBox",function(_,l,c)
-        if not l then return "no" end
-        local split = {}
-        for v in string.gmatch(c,"([^ ]+)") do
-            table.insert(split, v)
-        end
-        if #split < 1 or #c == 0 or (#split >= 2 and #split < 5) then
-            return "Usage: /radarInterestBox <interest> [<x1> <y1> <x2> <y2>]"
-        end
-        if #split > 5 then
-            return "Interest name cannot have spaces."
-        end
-        local i = split[1]
-        local interest = interests[i]
-        if not interest then
-            return "No interest detected with that name."
-        end
-        if split[2] then
-            local n = {tonumber(split[2]),tonumber(split[3]),tonumber(split[4]),tonumber(split[5])}
-            for k,v in next, n do
-                if not v then
-                    return string.format("Could not parse rect component %d.",k)
-                end
-            end
-            interest[4].box = n
-            saveInterests()
-            return string.format("Set interest %s to use box [%.1f,%.1f,%.1f,%.1f].",i,n[1],n[2],n[3],n[4])
-        else
-            interest[4].box = nil
-            saveInterests()
-            return string.format("Removed box of interest %s.",i)
-        end
-    end)
-    message.setHandler("/radarListInterests",function(_,l)
-        if not l then return "no" end
-        local str = ""
-        for k,v in next, interests do
-            if #str ~= 0 then
-                str = str..", "
-            end
-            str = string.format("%s^#%s;%s^reset;",str,renderutil.toHexColour(v[4].colour),k)
-        end
-        if #str == 0 then
-            return "There are no interests to list."
-        else
-            return str
-        end
-    end)
+    radarInterestInit()
+    radarPortalInit()
     message.setHandler("/radarSameMaster",function(_,l)
         if not l then return "no" end
         excludeSameMaster = not excludeSameMaster
@@ -569,6 +422,7 @@ function radarInit()
         local numTrackedWorld = 0
         local numTrackedRecent = 0
         local numTrackedActive = 0
+        local numTrackedKnown = 0
         for k,v in next, storage.radarPlayerPositions do
             numTracked = numTracked + 1
             if v.worldId == player.worldId() then
@@ -578,6 +432,9 @@ function radarInit()
                 end
                 if v.exists then
                     numTrackedActive = numTrackedActive + 1
+                    if v.known then
+                        numTrackedKnown = numTrackedKnown + 1
+                    end
                 end
             end
         end
@@ -588,9 +445,9 @@ function radarInit()
                 unknown = unknown + 1
             end
         end
-        local out = string.format("Tracked unique entities: %d (%d on world, %d recent, %d active)\
+        local out = string.format("Tracked unique entities: %d (%d on world, %d recent, %d active, %d active&known)\
 Serverside player blips: %d (%d unidentified)",
-                                  numTracked,numTrackedWorld,numTrackedRecent,numTrackedActive,
+                                  numTracked,numTrackedWorld,numTrackedRecent,numTrackedActive,numTrackedKnown,
                                   #serverPlayerPositions,unknown)
         return out
     end)
@@ -646,7 +503,7 @@ Serverside player blips: %d (%d unidentified)",
             if not i then
                 return "Need an interest."
             end
-            local interest = interests[i]
+            local interest = radarInterests[i]
             if not interest then
                 return "Can't find an interest of that name."
             end
@@ -685,13 +542,14 @@ Serverside player blips: %d (%d unidentified)",
         local lastYielded
         local lastProcessed
         while true do
+            local ignoreKnown = root.getConfiguration("abyss_ignoreKnown")
             for k,v in next, storage.radarPlayerPositions do
                 passiveProcessed = passiveProcessed + 1
                 if world.entityExists(v.id) and world.entityUniqueId(v.id) == v.uuid then
                     playerPositionPromises[k] = nil
                 else
                     local hitLimit = updatePlayerPosPromise(k,v)
-                    if v.worldId == player.worldId() and (includeOld or not v.old) then
+                    if (v.known or ignoreKnown) and v.worldId == player.worldId() and (includeOld or not v.old) and not player.getProperty("abyss_radarHideLongRange") then
                         playerPositionsToRender[k] = v
                     end
                     if hitLimit then
@@ -721,6 +579,9 @@ end
 local function entityPosKey(v)
     return string.format("e_%s",world.entityUniqueId(v))
 end
+local function maybePlayerAlias(v)
+    return playerAlias(world.entityUniqueId(v)) or world.entityName(v)
+end
 local friendlyColour = {0,255,0}
 local enemyColour = {255,0,0}
 local playerColour = {0,255,255}
@@ -733,16 +594,17 @@ local function updatePlayer(v)
     dat.pos = world.entityPosition(v)
     dat.uuid = world.entityUniqueId(v)
     dat.enemy = entity.isValidTarget(v)
-    dat.name = world.entityName(v)
+    dat.name = playerAlias(dat.uuid) or world.entityName(v)
+    dat.known = playerKnown(dat.uuid)
     dat.exists = true
     dat.old = false
     dat.id = v
     dat.worldId = player.worldId()
     dat.lastChecked = world.time()
-    dat.lastSeen = world.time()
+    dat.lastSeen = os.time()
     if v < 0 and v ~= player.id() then
         local key = connectionKey(connectionId(v))
-        connectionNames[key] = world.entityName(v)
+        connectionNames[key] = playerAlias(dat.uuid) or world.entityName(v)
         connectionPlayers[key] = dat
     end
     storage.radarPlayerPositions[k] = dat
@@ -789,10 +651,9 @@ local collisionTypes = {
     projectile=true,
     object=true
 }
-local interestNoteDistance = 5
 local selfNoteDistance = 20
 local cameraNoNoteDistance = 100
-function interestCheck(p)
+local function noteCheck(p)
     local cpos = (camera.position or mcontroller.position)()
     local mpos = mcontroller.position()
     local cdis = world.magnitude(p,cpos)
@@ -800,14 +661,14 @@ function interestCheck(p)
     if mdis < selfNoteDistance and cdis > cameraNoNoteDistance then
         return true
     end
-    for k,v in next, interests do
+    for k,v in next, radarInterests do
         if v[3] == player.worldId() then
             if v[4].box then
                 if rect.contains(rect.translate(v[4].box,v),p) then
                     return true
                 end
             else
-                if world.magnitude(p,v) < (v[4].radius or interestNoteDistance) then
+                if world.magnitude(p,v) < (v[4].radius or radarInterestDefaultNoteDistance) then
                     return true
                 end
             end
@@ -819,6 +680,187 @@ local verbose = false
 function radarSetVerbose(v)
     verbose = v
 end
+
+local window = {0,0,1,1}
+local cameraPos = nil
+local cameraOffset = {0,0}
+local relWindow1 = {0,0}
+local relWindow2 = {0,0}
+local relWindow = {0,0,1,1}
+local relAim = {0,0}
+local scale = 1
+local radarDisMult = 1
+local renderData = {}
+function radarRenderData()
+    renderData.window = window
+    renderData.cameraPos = cameraPos
+    renderData.cameraOffset = cameraOffset
+    renderData.relWindow1 = relWindow1
+    renderData.relWindow2 = relWindow2
+    renderData.relWindow = relWindow
+    renderData.scale = scale
+    renderData.radarDisMult = radarDisMult
+    renderData.relAim = relAim
+    return renderData
+end
+local function drawBox(r,c,t,layer)
+    local ls = {
+        generateLineDrawable({r[1],r[2]},{r[1],r[4]}),
+        generateLineDrawable({r[1],r[4]},{r[3],r[4]}),
+        generateLineDrawable({r[3],r[4]},{r[3],r[2]}),
+        generateLineDrawable({r[3],r[2]},{r[1],r[2]})
+    }
+    for _,l in next, ls do
+        l.color = c
+        l.width = t
+        l.fullbright = true
+        localAnimator.addDrawable(l,layer)
+    end
+end
+local function strokePoly(p,c,t,layer)
+    for k,v in next, p do
+        local n = p[k + 1] or p[1]
+        local l = generateLineDrawable(v,n)
+        l.color = c
+        l.width = t
+        l.fullbright = true
+        localAnimator.addDrawable(l,layer)
+    end
+end
+local function lineTowardsPos(p, c, d)
+    if radarVisibleLevel < 0 then return end
+    local dis = world.distance(p, distanceReferencePosition())
+    local angle = vec2.angle(dis)
+    if vec2.mag(dis) < 0.1 then
+        return
+    end
+    local o = world.distance(distanceReferencePosition(),mcontroller.position())
+    local s = vec2.add(vec2.withAngle(angle, (3*d*radarDisMult  )*scale),o)
+    local t = vec2.add(vec2.withAngle(angle, (3*d*radarDisMult+d)*scale),o)
+    local l = generateLineDrawable(s,t)
+    l.color = c
+    l.width = scale*d
+    l.fullbright = true
+    localAnimator.addDrawable(l, "Overlay+32002")
+end
+local function lineTowards(e, c)
+    return lineTowardsPos(world.entityPosition(e),c, 1)
+end
+
+local function printTime(t)
+    if t > 24*60*60 then -- 1 day
+        return string.format("%.0fd",t/60/60/24)
+    elseif t > 75*60 then -- 75 minutes, 1.25 hours
+        return string.format("%.0fh",t/60/60)
+    elseif t > 75 then -- 1.25 minutes
+        return string.format("%.0fm",t/60)
+    else
+        return string.format("%.0fs",t)
+    end
+end
+local hoveredIndications = {}
+local hoveredDis = 2
+local function indicatePosition_onlyOnscreen(p, c, d, o, ptype, priority)
+    if radarVisibleLevel < 1 then
+        return
+    end
+    local rel = world.distance(p, cameraPos())
+    if not rect.contains(relWindow, rel) then
+        return
+    end
+    local tm = world.magnitude(rel,relAim) 
+    local m = tm+(priority or 0)
+    if tm < hoveredDis then
+        table.insert(hoveredIndications,{
+            dis=tm,
+            disval=m,
+            colour={c[1],c[2],c[3],255},
+            size=d,
+            pos=p,
+            relPos=rel,
+            other=o,
+            othertype=ptype
+        })
+    end
+    local drawable = {
+        position=vec2.add(rel,cameraOffset),
+        color=c,
+        fullbright=true,
+        poly={
+            {d,0},{0,d},{-d,0},{0,-d}
+        }
+    }
+    localAnimator.addDrawable(drawable, "Overlay+32002")
+end
+local function indicatePosition(p, c, d, o, ptype, priority)
+    if radarVisibleLevel < 1 then
+        return
+    end
+    local rel = world.distance(p, cameraPos())
+    if rel[1] < relWindow[1]+2 then
+        rel[1] = relWindow[1]+2
+    elseif rel[1] > relWindow[3]-2 then
+        rel[1] = relWindow[3]-2
+    end
+    if rel[2] < relWindow[2]+2 then
+        rel[2] = relWindow[2]+2
+    elseif rel[2] > relWindow[4]-2 then
+        rel[2] = relWindow[4]-2
+    end
+    local tm = world.magnitude(rel,relAim) 
+    local m = tm+(priority or 0)
+    if tm < hoveredDis then
+        table.insert(hoveredIndications,{
+            dis=tm,
+            disval=m,
+            colour={c[1],c[2],c[3],255},
+            size=d,
+            pos=p,
+            relPos=rel,
+            other=o,
+            othertype=ptype
+        })
+    end
+    local drawable = {
+        position=vec2.add(rel,cameraOffset),
+        color=c,
+        fullbright=true,
+        poly={
+            {d,0},{0,d},{-d,0},{0,-d}
+        }
+    }
+    localAnimator.addDrawable(drawable, "Overlay+32002")
+end
+local function indicatePosition_withPortals(p, c, d, o, ptype, priority)
+    indicatePosition(p, c, d, o, ptype, priority)
+    for _,tp in next, radarPortalsTransfers(p) do
+        indicatePosition_onlyOnscreen(tp, c, d*0.5, o, {"portal",ptype}, priority+0.25)
+    end
+end
+local function indicateEntity(e, c, priority)
+    return indicatePosition(world.entityPosition(e),c,1,e,"entity",priority or 0)
+end
+local function indicateEntity_withPortals(e, c, priority)
+    return indicatePosition_withPortals(world.entityPosition(e),c,1,e,"entity",priority or 0)
+end
+local function indicAlpha(c)
+    return {c[1],c[2],c[3],(c[4] or 255)/2}
+end
+radarIndicatePosition = indicatePosition
+radarIndicateEntity = indicateEntity
+radarLineTowardsPos = lineTowardsPos
+radarLineTowardsEntity = lineTowardsEntity
+radarDrawBox = drawBox
+radarIndicAlpha = indicAlpha
+
+function radarExtra()
+end
+radarExtraDescribe = {
+    interest=radarDescribeInterest,
+    portal=radarDescribePortal
+}
+
+radarVisibleLevel = 0
 function radar(hidden,disMult)
     if isPuppet() then
         return
@@ -826,142 +868,62 @@ function radar(hidden,disMult)
     if not initialized then
         --sb.logWarn("Radar was not initialized! Initializing late.")
         radarInit()
-        if not initialized then
-            return
-        end
+        return
     end
-    disMult = disMult or 1
+    radarDisMult = disMult or 1
     queriesSent = 0
     queriesSentTotal = 0
     queryLimit = queryLimitMax
     passiveProcessed = 0
     
-    local visibleLevel = 0
+    radarVisibleLevel = -1
+    -- -1 = hidden
     -- 0 = standard, just draws lines
     -- 1 = draws coloured blobs on entity positions and the closest point on-screen to said positions, also shows information on the closest one under the mouse
     if type(hidden) == "number" then
-        visibleLevel = hidden-1
+        radarVisibleLevel = hidden-1
         hidden = hidden == 0
+    elseif not hidden then
+        radarVisibleLevel = 0
     end
-    -- render lines to show the locations of nearby entities and all players in the world, as well as mech beacons
+    
+    if getGenericTime() < lastPing then
+        -- time jumped backwards, likely due to reload
+        lastPing = getGenericTime()
+    end
     if getGenericTime() > lastPing + 3/pingTimescale then
         lastPing = getGenericTime()
         world.spawnMonster("punchy", mcontroller.position(), scannerPunchyParams)
     end
+    -- render lines to show the locations of nearby entities and all players in the world, as well as mech beacons
     local interestNoteColourHSV = {math.cos(world.time()*5)*30+30,1,1}
     local interestNoteColour = renderutil.toRGB(interestNoteColourHSV)
     
-    local window = camera and camera.worldScreenRect() or world.clientWindow()
-    local cameraPos = camera and camera.position or mcontroller.position
-    local cameraOffset = world.distance(cameraPos(),mcontroller.position())
-    local relWindow1 = world.distance(rect.ll(window),cameraPos())
-    local relWindow2 = world.distance(rect.ur(window),cameraPos())
-    local relWindow = {relWindow1[1],relWindow1[2],relWindow2[1],relWindow2[2]}
-    local scale = (window[4] - window[2])/65
-    local localAnimator = getLocalAnimator()
-    if not localAnimator then
+    window = camera and camera.worldScreenRect() or world.clientWindow()
+    cameraPos = camera and camera.position or mcontroller.position
+    cameraOffset = world.distance(cameraPos(),mcontroller.position())
+    relWindow1 = world.distance(rect.ll(window),cameraPos())
+    relWindow2 = world.distance(rect.ur(window),cameraPos())
+    relWindow = {relWindow1[1],relWindow1[2],relWindow2[1],relWindow2[2]}
+    relAim = world.distance(tech.aimPosition(),cameraPos())
+    scale = (window[4] - window[2])/65
+    if not ensureLocalAnimator() then
         return
     end
-    local function drawBox(r,c,t,layer)
-        local ls = {
-            generateLineDrawable({r[1],r[2]},{r[1],r[4]}),
-            generateLineDrawable({r[1],r[4]},{r[3],r[4]}),
-            generateLineDrawable({r[3],r[4]},{r[3],r[2]}),
-            generateLineDrawable({r[3],r[2]},{r[1],r[2]})
-        }
-        for _,l in next, ls do
-            l.color = c
-            l.width = t
-            l.fullbright = true
-            localAnimator.addDrawable(l,layer)
-        end
-    end
-    local function strokePoly(p,c,t,layer)
-        for k,v in next, p do
-            local n = p[k + 1] or p[1]
-            local l = generateLineDrawable(v,n)
-            l.color = c
-            l.width = t
-            l.fullbright = true
-            localAnimator.addDrawable(l,layer)
-        end
-    end
-    local function lineTowardsPos(p, c, d)
-        if hidden then return end
-        local dis = world.distance(p, distanceReferencePosition())
-        local angle = vec2.angle(dis)
-        if vec2.mag(dis) < 0.1 then
-            return
-        end
-        local o = world.distance(distanceReferencePosition(),mcontroller.position())
-        local s = vec2.add(vec2.withAngle(angle, (3*d*disMult  )*scale),o)
-        local t = vec2.add(vec2.withAngle(angle, (3*d*disMult+d)*scale),o)
-        local l = generateLineDrawable(s,t)
-        l.color = c
-        l.width = scale*d
-        l.fullbright = true
-        localAnimator.addDrawable(l, "Overlay+32002")
-    end
-    local function lineTowards(e, c)
-        return lineTowardsPos(world.entityPosition(e),c, 1)
-    end
-    local raim = world.distance(tech.aimPosition(),cameraPos())
     -- TODO: replacing this entire list every frame is kinda... bad
-    local hoveredIndications = {}
-    local hoveredDis = 2
-    local function indicatePosition(p, c, d, o, ptype, priority)
-        if visibleLevel < 1 then
-            return
-        end
-        local rel = world.distance(p, cameraPos())
-        if rel[1] < relWindow[1]+2 then
-            rel[1] = relWindow[1]+2
-        elseif rel[1] > relWindow[3]-2 then
-            rel[1] = relWindow[3]-2
-        end
-        if rel[2] < relWindow[2]+2 then
-            rel[2] = relWindow[2]+2
-        elseif rel[2] > relWindow[4]-2 then
-            rel[2] = relWindow[4]-2
-        end
-        local tm = world.magnitude(rel,raim) 
-        local m = tm+(priority or 0)
-        if tm < hoveredDis then
-            table.insert(hoveredIndications,{
-                dis=tm,
-                disval=m,
-                colour={c[1],c[2],c[3],255},
-                size=d,
-                pos=p,
-                relPos=rel,
-                other=o,
-                othertype=ptype
-            })
-        end
-        local drawable = {
-            position=vec2.add(rel,cameraOffset),
-            color=c,
-            fullbright=true,
-            poly={
-                {d,0},{0,d},{-d,0},{0,-d}
-            }
-        }
-        localAnimator.addDrawable(drawable, "Overlay+32002")
-    end
-    local function indicateEntity(e, c, priority)
-        return indicatePosition(world.entityPosition(e),c,1,e,"entity",priority or 0)
-    end
-    local function indicAlpha(c)
-        return {c[1],c[2],c[3],(c[4] or 255)/2}
-    end
+    hoveredIndications = {}
+    
     lineTowardsPos(mcontroller.position(),{255,255,255},1)
     if verbose then
-        indicateEntity(entity.id(),{255,255,255,127},0.5)
+        indicateEntity_withPortals(entity.id(),{255,255,255,127},0.5)
     else
-        indicatePosition(mcontroller.position(),{255,255,255,127},1,"Self","generic",0.5)
+        indicatePosition_withPortals(mcontroller.position(),{255,255,255,127},1,"Self","generic",0.5)
     end
     if referenceType == "camera" then
-        indicatePosition(distanceReferencePosition(),{255,255,255,127},1,"Camera","generic",0.5)
+        indicatePosition_withPortals(distanceReferencePosition(),{255,255,255,127},1,"Camera","generic",0.5)
+    end
+    for k,v in next, radarPortalsTransfers(distanceReferencePosition()) do
+        lineTowardsPos(v,{255,255,255},1.5)
     end
     for k,v in next, commonUniqueEntities do
         if not v.pos then
@@ -980,12 +942,8 @@ function radar(hidden,disMult)
             indicatePosition(v.pos,indicAlpha(v.colour),2,v,"commonUniqueEntity")
         end
     end
-    for k,v in next, interests do
-        if v[3] == player.worldId() then
-            lineTowardsPos(v,v[4].colour,2)
-            indicatePosition(v,indicAlpha(v[4].colour),2,k,"interest")
-        end
-    end
+    radarBlipPortals()
+    radarBlipInterests()
     
     local numActive = 0
     for k,v in next, playerPositionsToRender do
@@ -996,7 +954,7 @@ function radar(hidden,disMult)
             numActive = numActive + 1
             local c = gonePlayerColour
             local priority = 1
-            if v.exists and interestCheck(v.pos) or (referenceType == "player" and reference == v) then
+            if v.exists and noteCheck(v.pos) or (referenceType == "player" and reference == v) then
                 c = interestNoteColour
                 priority = -1
             elseif v.enemy then
@@ -1007,6 +965,7 @@ function radar(hidden,disMult)
                     c = goneEnemyPlayerColour
                 end
             elseif v.exists then
+                playerDetected(v.pos)
                 c = playerColour
                 priority = -0.5
             end
@@ -1015,11 +974,20 @@ function radar(hidden,disMult)
                 if not includeOld then
                     playerPositionsToRender[k] = nil
                 end
-            else
+            elseif v.exists then
+                if fUENotWorking then
+                    local t = math.max(world.time()-v.lastChecked,0)
+                    local perc = 0.5+(1-math.min(t/promiseTimeout,1))*0.5
+                    c = {c[1]*perc,c[2]*perc,c[3]*perc,(c[4] or 255)*perc}
+                end
                 updatePlayerPosPromise(k,v,false)
             end
             lineTowardsPos(v.pos, c, 1)
-            indicatePosition(v.pos,indicAlpha(c),1,v,"player",priority)
+            if v.exists then
+                indicatePosition_withPortals(v.pos,indicAlpha(c),1,v,"player",priority)
+            else
+                indicatePosition(v.pos,indicAlpha(c),1,v,"player",priority)
+            end
         end
     end
     coroutine.resume(playerPositionUpdater)
@@ -1031,8 +999,8 @@ function radar(hidden,disMult)
         end
     end
     sb.setLogMap("abyssradar_player_queries",string.format("%d (%d/%d passive)",queriesSentTotal,queriesSent,queryLimit))
-    sb.setLogMap("abyssradar_player_status",string.format("aq: %d, pp: %d, a: %d",numPromises, passiveProcessed, numActive))
-    sb.setLogMap("abyssradar_players_onWorld",string.format("%d",#serverPlayerPositions))
+    sb.setLogMap("abyssradar_player_status",string.format("aq: %d, pp: %d, a: %d %s",numPromises, passiveProcessed, numActive, fUENotWorking and "(fUE not working)" or ""))
+    sb.setLogMap("abyssradar_players_onWorld",string.format("%d (ls %.1f)",#serverPlayerPositions,getGenericTime()-lastPing))
     
     local types = {"npc","monster", "vehicle","stagehand","plantDrop"}
     if includeProjectiles then
@@ -1067,7 +1035,8 @@ function radar(hidden,disMult)
         table.insert(types, "player")
     end
     -- TODO: add world.entities binding to oSB so this isn't necessary
-    local nearbyEntities = world.entityQuery(cameraPos(), 300, {includedTypes=types})
+    local ignoreKnown = root.getConfiguration("abyss_ignoreKnown")
+    local nearbyEntities = world.entities and world.entities({includedTypes=types}) or world.entityQuery(cameraPos(), 300, {includedTypes=types})
     for k,v in next, nearbyEntities do
         if (not hadFindingType) and world.entityType(v) == radarFindingType and world.entityTypeName(v) ~= radarFinding then
         elseif not excludeEntity(v) then
@@ -1092,7 +1061,7 @@ function radar(hidden,disMult)
                 else
                     colour = {0,127,255}
                 end
-            elseif t == "player" and interestCheck(world.entityPosition(v)) then
+            elseif t == "player" and noteCheck(world.entityPosition(v)) then
                 priority = -1
                 colour = interestNoteColour
             elseif entity.isValidTarget(v) then
@@ -1111,10 +1080,12 @@ function radar(hidden,disMult)
                     colour = interestNoteColour
                 end
             end
+            -- TODO: recog for here, in the... extremely unlikely case that someone makes recognition for non-oSB
             lineTowards(v,colour)
             indicateEntity(v,indicAlpha(colour),priority)
             if t == "player" then
-                playerDetected()
+                -- portals can't really exist on non-oSB, so don't bother
+                playerDetected(world.entityPosition(v))
                 updatePlayer(v)
             end
         end
@@ -1123,19 +1094,22 @@ function radar(hidden,disMult)
         local nearbyPlayers = world.players()
         for k,v in next, nearbyPlayers do
             if not excludeEntity(v) then
-                playerDetected()
+                playerDetected(world.entityPosition(v))
                 local p = updatePlayer(v)
                 local priority = -0.5
                 local colour = {0,255,255}
-                if interestCheck(world.entityPosition(v)) or (referenceType == "player" and reference == p) then
+                local pos = world.entityPosition(v)
+                if noteCheck(pos) or (referenceType == "player" and reference == p) then
                     priority = -1
                     colour = interestNoteColour
                 elseif entity.isValidTarget(v) then
                     priority = -1
                     colour = {255,255,0}
                 end
-                lineTowards(v,colour)
-                indicateEntity(v,indicAlpha(colour),priority)
+                if ignoreKnown or playerKnown(world.entityUniqueId(v)) then
+                    lineTowards(v,colour)
+                    indicateEntity_withPortals(v,indicAlpha(colour),priority)
+                end
             end
         end
     end
@@ -1143,12 +1117,13 @@ function radar(hidden,disMult)
     --local newServerPlayerPositions = {}
     for k,v in next, serverPlayerPositions do
         local dis = world.magnitude(v, mcontroller.position())
-        -- TODO: maybe check if offscreen or onscreen instead
-        local unidentified = v[4] ~= myCid and not connectionPlayers[connectionKey(v[4])]
+        
+        local pl = connectionPlayers[connectionKey(v[4])]
+        local unidentified = v[4] ~= myCid and (not pl or not pl.exists)
         if unidentified then
             local crgb
             local size = 0.5
-            if interestCheck(v) then
+            if noteCheck(v) then
                 crgb = interestNoteColour
                 size = 0.75
             else
@@ -1201,7 +1176,7 @@ function radar(hidden,disMult)
     table.sort(hoveredIndications,function(a,b)
         return a.disval < b.disval
     end)
-    if visibleLevel >= 1 and hoveredIndications[1] then
+    if radarVisibleLevel >= 1 and hoveredIndications[1] then
         local text
         local numOldPlayers = 0
         local numPlayers = 0
@@ -1230,6 +1205,11 @@ function radar(hidden,disMult)
             colour = closestIndicated.colour
             local other = closestIndicated.other
             local othertype = closestIndicated.othertype or "none"
+            if type(othertype) == "table" then
+                if othertype[1] == "portal" then
+                    othertype = othertype[2]
+                end
+            end
             local fstr = "%.1f"
             if verbose then
                 fstr = "%.3f"
@@ -1242,7 +1222,11 @@ function radar(hidden,disMult)
                 text = text..string.format("\nType: %s", etype)
                 local rel = world.distance(e:position(),mcontroller.position())
                 if not namelessTypes[etype] then
-                    text = text..string.format("\nName: %s", noDirectives(e:name()))
+                    if etype == "player" then
+                        text = text..string.format("\nName: %s", noDirectives(playerAlias(e:uniqueId()) or e:name()))
+                    else
+                        text = text..string.format("\nName: %s", noDirectives(e:name()))
+                    end
                 end
                 if not kindlessTypes[etype] then
                     text = text..string.format("\nKind: %s", nameKindTypes[etype] and e:name() or e:typeName())
@@ -1334,7 +1318,7 @@ function radar(hidden,disMult)
                     if not other.lastSeen then
                         text = text.."\nLast seen: Unknown"
                     else
-                        text = text..string.format("\nLast seen: %.0fs ago",world.time()-other.lastSeen)
+                        text = text..string.format("\nLast seen: %s ago",printTime(os.time()-other.lastSeen))
                     end
                 end
             elseif othertype == "commonUniqueEntity" then
@@ -1342,29 +1326,12 @@ function radar(hidden,disMult)
                 if verbose then
                     text = text.."\nUUID: "..other.uuid
                 end
-            elseif othertype == "interest" then
-                text = text.."\n"..other
-                local i = interests[other]
-                local rel = world.distance(i, mcontroller.position())
-                if i[4].box then
-                    if rect.intersects(window,rect.translate(i[4].box,i)) then
-                        local t = rect.translate(i[4].box,rel)
-                        drawBox(t,i[4].colour,scale,"Overlay+32001")
-                    end
-                else
-                    local rad = i[4].radius or interestNoteDistance
-                    if rect.contains(rect.pad(window,rad),i) then
-                        drawCircle(rad,rel,{
-                            color=i[4].colour,
-                            width=scale,
-                            fullbright=true
-                        },"Overlay+32001")
-                    end
-                end
             elseif othertype == "blip" then
                 text = text..string.format("\n %s (%d)",noDirectives(connectionName(other)),other)
             elseif othertype == "generic" then
                 text = text.."\n"..other
+            elseif radarExtraDescribe[othertype] then
+                text = text.."\n"..radarExtraDescribe[othertype](other,colour)
             end
         elseif renderingPlayerList then
             -- TODO: this is too much repeated stuff
@@ -1378,7 +1345,7 @@ function radar(hidden,disMult)
                     local dis = world.magnitude(v.pos,distanceReferencePosition())
                     totalPos = vec2.add(totalPos,v.relPos)
                     if v.othertype == "entity" then
-                        text = text..string.format("\n%s (%.1f)",noDirectives(world.entityName(v.other)),dis)
+                        text = text..string.format("\n%s (%.1f)",noDirectives(maybePlayerAlias(v.other)),dis)
                     elseif v.othertype == "player" then
                         text = text..string.format("\n%s (%.1f)",noDirectives(v.other.name),dis)
                     end
@@ -1400,7 +1367,7 @@ function radar(hidden,disMult)
             end
             closestRelPos = vec2.div(totalPos,numOldPlayers)
         elseif renderingInterestList then
-            -- multiple players
+            -- multiple interests
             text = string.format("%d interests",numInterests)
             local totalPos = {0,0}
             local totalColour = {0,0,0}

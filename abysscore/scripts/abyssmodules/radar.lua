@@ -9,7 +9,7 @@ local module = {
     enableMoveKey=nil,
     enableMoveKey_shift=nil
 }
-local radarMode = 1
+local radarMode = 0
 radarModule = module
 local m = module
 function module.isBindHeld(args)

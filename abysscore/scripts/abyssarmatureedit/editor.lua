@@ -1,6 +1,7 @@
 require "/scripts/terra_vec2ref.lua"
 require "/scripts/terra_vec3.lua"
 require "/scripts/terra_mat3.lua"
+require "/scripts/abyssrenderutil.lua"
 require "/scripts/terra_renderutil.lua"
 require "/scripts/terra_proxy.lua"
 require "/scripts/poly.lua"

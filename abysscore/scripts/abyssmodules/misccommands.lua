@@ -68,6 +68,7 @@ function module.init()
     commandAlias("/minion","/abyssMinion")
     commandAlias("/personality","/abyssPersonality")
     commandAlias("/configKey","/abyssConfigKey")
+    commandAlias("/renderLayer","/abyssRenderLayer")
 end
 function module.isActive()
     return false

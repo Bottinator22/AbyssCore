@@ -141,6 +141,10 @@ function update(dt,fireMode,shifting,moves)
     elseif state == "fly" then
         state = "jump"
     end
+    state = string.lower(state)
+    if state == "swimidle" then
+        state = "swimIdle"
+    end
     if state ~= lastState then
         frame = 1
         frameTimer = 0

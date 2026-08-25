@@ -1,4 +1,12 @@
 
+local extraKeys = {
+    extraEmoteDirectives="emoteDirectives",
+    extraBodyDirectives="bodyDirectives",
+    extraHairDirectives="hairDirectives",
+    extraFacialHairDirectives="facialHairDirectives",
+    extraFacialMaskDirectives="facialMaskDirectives"
+}
+local b = {}
 local lastMergedConfigName
 local function mergeConfigs(iocfg,key)
     local cfg = player.getProperty(key)
@@ -6,12 +14,49 @@ local function mergeConfigs(iocfg,key)
         if cfg.parent then
             iocfg = mergeConfigs(iocfg,cfg.parent)
         end
+        local baseIdentity = player.getProperty("abyss_origIdentity")
+        local extras = {
+            base={},
+            flip={}
+        }
+        for k,v in next, extraKeys do
+            extras.base[v] = (iocfg.base or b)[k]
+            extras.flip[v] = (iocfg.flip or b)[k]
+        end
         iocfg = sb.jsonMerge(iocfg,cfg)
-        iocfg.base = sb.jsonMerge(iocfg.base or {}, sb.jsonMerge(cfg.both or {},cfg.base or {}))
-        iocfg.flip = sb.jsonMerge(iocfg.flip or {}, sb.jsonMerge(cfg.both or {},cfg.flip or {}))
+        iocfg.base = sb.jsonMerge(iocfg.base or b, sb.jsonMerge(cfg.both or b,cfg.base or b))
+        iocfg.flip = sb.jsonMerge(iocfg.flip or b, sb.jsonMerge(cfg.both or b,cfg.flip or b))
         if cfg.name then
             iocfg.base.name = cfg.name
             iocfg.flip.name = cfg.name
+        end
+        for k,v in next, extraKeys do
+            -- check for extra directives that should be stacked on top, and check for overwrites (for if they should be replaced)
+            local exb = (cfg.base or b)[k] or (cfg.both or b)[k]
+            local exf = (cfg.flip or b)[k] or (cfg.both or b)[k]
+            local ovb = (cfg.base or b)[v] or (cfg.both or b)[v]
+            local ovf = (cfg.flip or b)[v] or (cfg.both or b)[v]
+            -- add extra directives to the list and to the key in question
+            if exb then
+                extras.base[v] = (extras.base[v] or "")..exb
+                iocfg.base[v] = (iocfg.base[v] or baseIdentity[v])..exb
+            end
+            if exf then
+                extras.flip[v] = (extras.flip[v] or "")..exf
+                iocfg.flip[v] = (iocfg.flip[v] or baseIdentity[v])..exf
+            end
+            -- if overwritten, readd all extra directives
+            if ovb and extras.base[v] then
+                iocfg.base[v] = ovb..extras.base[v]
+            end
+            if ovf and extras.flip[v] then
+                iocfg.flip[v] = ovf..extras.flip[v]
+            end
+        end
+        -- keep extra directives around in a big list (instead of a small overridden list)
+        for k,v in next, extraKeys do
+            iocfg.base[k] = extras.base[v]
+            iocfg.flip[k] = extras.flip[v]
         end
     end
     return iocfg

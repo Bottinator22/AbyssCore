@@ -12,6 +12,7 @@ require "/scripts/abysstrail.lua"
 require "/scripts/abyssparticles.lua"
 require "/scripts/terra_aimposition.lua"
 require "/scripts/terra_loadRegion.lua"
+require "/scripts/abysscommandableutil.lua"
 
 local passiveMode = false
 function command_isPassive()
@@ -22,9 +23,8 @@ math.randomseed(math.floor(os.clock()*10000))
 local initialized
 local ownerId
 local coreId
-local isExpanded
+isExpanded = false
 local dieTimer = 20
-local timer = 0
 local stateColours = {
   idle={255,0,0},
   green={0,255,0},
@@ -35,7 +35,6 @@ local stateColours = {
   deepblue={0,0,255},
   magenta={255,0,255}
 }
-local orders = {}
 local zeroVec = {0,0}
 local lastEyeAnimState
 local closeEyeTimer = 0
@@ -44,10 +43,10 @@ local spinDir = (math.random()>0.5) and 1 or -1
 local eyeState = "idle"
 local eyeAnimState = "idle"
 local eyeScale = 1
-local eyeTarget = {0,0}
+eyeTarget = {0,0}
 local shootTimer = 0
 local orbitD = math.pi/60
-local orbitDistance = 7+8*math.random()
+orbitDistance = 7+8*math.random()
 local orbitDFlipTimer = 120*math.random()
 local passiveTargetPos = {0,0}
 local hasPassiveTargetPos = false
@@ -80,7 +79,7 @@ local maxTargetRangeFromCore = 80
 local targetQueryInterval = 10
 local targetQueryTimer = 0
 local minionType
-local targetPos
+targetPos = nil
 local overrideTargetPos
 local overrideTargetId
 local overrideHealId
@@ -127,120 +126,6 @@ function sanitizeString(s)
   return new
 end
 local isPassiveIdle = true
-local builder_minPos
-local builder_maxPos
-local builder_blocks
-local builder_timer = 0
-function builder_key(x,y,layer)
-  return string.format("x%.0fy%.0fl%s",x,y,layer)
-end
-local dOptions = {}
-function builder_set(x,y, layer, mat, op)
-  local key = builder_key(x,y,layer)
-  if not builder_blocks then
-    builder_blocks = {}
-    builder_minPos = {math.huge,math.huge}
-    builder_maxPos = {-math.huge,-math.huge}
-  end
-  builder_minPos[1] = math.min(builder_minPos[1], x)
-  builder_minPos[2] = math.min(builder_minPos[2], y)
-  builder_maxPos[1] = math.max(builder_maxPos[1], x+1)
-  builder_maxPos[2] = math.max(builder_maxPos[2], y+1)
-  builder_blocks[key] = {pos={x,y,layer},mat=mat,active=false,hue=(op or dOptions).hue or nil,collisionMode=(op or dOptions).coll or nil,colour=(op or dOptions).colour or nil}
-end
-function builder_order(from, to, layer, mat)
-  for x=from[1],to[1]-1,1 do
-    for y=from[2],to[2]-1,1 do
-      builder_set(x,y,layer,mat)
-    end
-  end
-end
-local placeholderProps = {}
-local placeholderPropRow = {}
-setmetatable(placeholderPropRow,{__index=function()
-    return nil
-end})
-setmetatable(placeholderProps,{__index=function()
-    return placeholderPropRow
-end})
--- expects schematic to be decompressed already
--- same format as Support Drone schematic
-function builder_schematic(schem, pos)
-  local fgColours = schem.fgColours or placeholderProps
-  local bgColours = schem.bgColours or placeholderProps
-  local fgHues = schem.fgHues or placeholderProps
-  local bgHues = schem.bgHues or placeholderProps
-  local fgCollisions = schem.fgCollisions or placeholderProps
-  local bgCollisions = schem.bgCollisions or placeholderProps
-  local size = schem.size
-  for y,r in next,schem.background do
-    for x,v in next,r do
-      builder_set(pos[1]+x-1,pos[2]-y+1,"background",v,{colour=bgColours[y][x],hue=bgHues[y][x],coll=bgCollisions[y][x]})
-    end
-  end
-  for y,r in next,schem.foreground do
-    for x,v in next,r do
-      builder_set(pos[1]+x-1,pos[2]-y+1,"foreground",v,{colour=fgColours[y][x],hue=fgHues[y][x],coll=fgCollisions[y][x]})
-    end
-  end
-  -- todo: objects
-  -- todo: wires (oSB)
-end
-local otherLayer = {
-  foreground="background",
-  background="foreground"
-}
-local miscGroupI = 0
-local miscGroups = {
-  "misc1",
-  "misc2",
-  "misc3",
-  "misc4",
-  "misc5",
-  "misc6"
-}
-local builder_maxBeams = 50
-local builder_beams = {}
-for i=1,builder_maxBeams,1 do
-  local part = "laser"
-  if i > 1 then
-    part = string.format("laser%.0f",i)
-  end
-  table.insert(builder_beams, {
-    part=part,
-    current=nil
-  })
-end
-local function builder_anyFreeBeams()
-  for k,v in next, builder_beams do
-    if not v.current then
-      return true
-    end
-  end
-  return false
-end
-local function builder_unassigned(b)
-  --[[for k,v in next, builder_beams do
-    if v.current == b then
-      return false
-    end
-  end]]
-  return not b.active
-end
-local function builder_assignBeam(b)
-  for k,v in next, builder_beams do
-    if not v.current then
-      v.current = b
-      b.active = true
-      return true
-    end
-  end
-  return false
-end
-function getMiscGroup()
-  miscGroupI = miscGroupI + 1
-  return miscGroups[miscGroupI]
-end
 local analyzerReadResources = {
   {
     name="shieldHealth",
@@ -371,6 +256,9 @@ function init()
     self.shouldDie = true
     initialized = false
     isExpanded = config.getParameter("isExpanded") -- whether or not this minion has expanded params
+    if isExpanded then
+      require "/scripts/abyssminion/builder.lua"
+    end
     ownerId = config.getParameter("ownerId")
     coreId = config.getParameter("coreId")
     anchorParent = config.getParameter("anchorParent")
@@ -450,244 +338,7 @@ function init()
   local dt = script.updateDt()
   passiveFuncs={
     builder=function()
-        -- TODO: move this to its own script
-        if not isExpanded then
-          world.debugText("Attempting to run builder code on a non-expanded minion!",mcontroller.position(),"red")
-          return
-        end
-        builder_timer = builder_timer+1
-        timer = timer + 1
-        local anyToDo = false
-        if builder_blocks and builder_timer > 0 and builder_anyFreeBeams() then
-          builder_timer = 0
-          for k,v in next, builder_blocks do
-            if builder_unassigned(v) then
-              if world.isTileProtected(v.pos) or v.pos[2] < 0 or v.pos[2] >= world.size()[2] then
-                builder_blocks[k] = nil
-              elseif v.pos[3] == "liquid" then
-                local l = world.liquidAt(vec2.copyToRef(v.pos, vec2working1))
-                local g = false
-                if not l then
-                  if not v.mat or world.material(v.pos,"foreground") then
-                    g = true
-                  end
-                else
-                  if v.mat == root.liquidName(l[1]) then
-                    g = true
-                  end
-                end
-                if not g then
-                  anyToDo = true
-                  builder_assignBeam(v)
-                  if not builder_anyFreeBeams() then
-                    break
-                  end
-                else
-                  builder_blocks[k] = nil
-                end
-              else
-                if v.delayUntil and v.delayUntil > timer then
-                  anyToDo = true
-                elseif world.material(v.pos,v.pos[3]) ~= v.mat then
-                  anyToDo = true
-                  builder_assignBeam(v)
-                  if not builder_anyFreeBeams() then
-                    break
-                  end
-                elseif not (v.expireDelayUntil and v.expireDelayUntil > timer) then
-                  builder_blocks[k] = nil
-                else
-                  anyToDo = true
-                end
-              end
-            else
-              anyToDo = true
-            end
-          end
-          if not anyToDo then
-            builder_blocks = nil
-          end
-        end
-        local mePos = vec2.add(mcontroller.position(), vec2.mulToRef(mcontroller.velocity(), 1/60, vec2working1))
-        if builder_blocks then
-          vec2.addToRef(vec2.mulToRef(vec2.disToRef(builder_maxPos, builder_minPos, vec2working1),0.5,vec2working1), builder_minPos, eyeTarget)
-          world.debugPoint(eyeTarget, "green")
-          local t = vec2working4
-          t[1] = math.min(math.max(mePos[1],builder_minPos[1]),builder_maxPos[1])
-          t[2] = math.min(math.max(mePos[2],builder_minPos[2]),builder_maxPos[2])
-          world.debugPoint(t, "magenta")
-          if vec2.eq(t, mePos) then
-            -- move out of the target square
-            -- eyeTarget is currently the center of the structure, so use it as a position to move away from
-            local angle = vec2.normToRef(world.distance(mePos, eyeTarget), vec2working1)
-            local dis = 100
-            vec2.addToRef(mePos, vec2.mulToRef(angle, dis, vec2working1), targetPos)
-          else
-            -- keep within a distance of the target square
-            local angle = vec2.normToRef(world.distance(mePos, t), vec2working1)
-            local dis = orbitDistance
-            vec2.addToRef(t, vec2.mulToRef(angle, dis, vec2working1), targetPos)
-          end
-          isPassiveIdle = false
-          animator.setAnimationState("misc", "deepblue")
-          -- visually represent the target square with 4 animated parts
-          local poly = {builder_minPos, {builder_minPos[1],builder_maxPos[2]}, builder_maxPos, {builder_maxPos[1],builder_minPos[2]}}
-          local gA = 0
-          local ga = 0
-          local gb = 0
-          for k,v in next, poly do
-            local n = poly[k+1]
-            if k == 4 then
-              n = poly[1]
-            end
-            local l = world.magnitude(v,n)
-            local a = vec2.angle(world.distance(n,v))
-            local g = getMiscGroup()
-            animator.resetTransformationGroup(g)
-            animator.scaleTransformationGroup(g, {l*8,1})
-            animator.translateTransformationGroup(g,{l/2,0})
-            animator.rotateTransformationGroup(g, a)
-            animator.translateTransformationGroup(g,world.distance(v,mePos))
-            
-            local a1 = vec2.angle(world.distance(v, mePos))
-            for k2,v2 in next, poly do
-              local a2 = vec2.angle(world.distance(v2, mePos))
-              local d = math.abs(util.angleDiff(a1,a2))
-              if d > gA then
-                gA = d
-                ga = v
-                gb = v2
-              end
-            end
-          end
-          local rect = {builder_minPos[1],builder_minPos[2],builder_maxPos[1],builder_maxPos[2]}
-          loadRegion(rect)
-          local isFirst = true
-          for k,v in next, builder_beams do
-            animator.resetTransformationGroup(v.part)
-            -- work on the current block
-            if v.current then
-              if isFirst then
-                vec2.addToRef(v.current.pos, 0.5, eyeTarget)
-              end
-              world.debugPoint(v.current.pos, "red")
-              local angle = vec2.angle(world.distance(eyeTarget, mePos))
-              local l = world.magnitude(eyeTarget, mePos)-0.5
-              animator.scaleTransformationGroup(v.part, {l*8,1})
-              animator.translateTransformationGroup(v.part,{l/2,0})
-              animator.rotateTransformationGroup(v.part, angle)
-              if v.current.pos[3] == "liquid" then
-                local ll = world.liquidAt(vec2.copyToRef(v.current.pos, vec2working1))
-                local l = ll and root.liquidName(ll[1]) or nil
-                if l ~= v.current.mat then
-                  if not l then
-                    animator.setAnimationState(v.part,"deepblue")
-                    if world.spawnLiquid(v.current.pos, root.liquidId(v.current.mat), 1) then
-                      -- important that this be done immediately
-                      builder_blocks[builder_key(v.current.pos[1],v.current.pos[2],v.current.pos[3])] = nil
-                      v.current.active = false
-                      v.current = nil
-                    end
-                  else
-                    animator.setAnimationState(v.part,"red")
-                    world.destroyLiquid(v.current.pos)
-                  end
-                else
-                  builder_blocks[builder_key(v.current.pos[1],v.current.pos[2],v.current.pos[3])] = nil
-                  v.current.active = false
-                  v.current = nil
-                end
-              else
-                -- is mat
-                local mat = world.material(v.current.pos, v.current.pos[3])
-                if mat ~= v.current.mat then
-                  if not mat and not world.tileIsOccupied(v.current.pos, v.current.pos[3] == "foreground") then
-                    animator.setAnimationState(v.part,"green")
-                    if not world.placeMaterial(v.current.pos, v.current.pos[3], v.current.mat, v.current.hue or 0, true) then
-                      local fgKey = builder_key(v.current.pos[1],v.current.pos[2],"foreground")
-                      if v.current.pos[3] == "background" and builder_blocks[fgKey] and builder_blocks[fgKey].mat then
-                        v.current.delayUntil = timer+60
-                        v.current.active = false
-                        v.current = nil
-                      elseif v.current.tempObjPos and v.current.pos[3] == "background" then
-                        if world.placeMaterial(v.current.pos, "foreground", "blackblock", 0, true) then
-                          v.current.tempTile = fgKey
-                          builder_blocks[fgKey] = {pos={v.current.pos[1],v.current.pos[2],"foreground"},mat=false,delayUntil=timer+30,expireDelayUntil=timer+120}
-                        end
-                      elseif not world.tileIsOccupied(v.current.pos, true) then
-                        -- trying to place background blocks directly behind this client master object crashes the game, so don't
-                        local pos = vec2.addToRef(v.current.pos,{0,1},vec2working1)
-                        local k = builder_key(pos[1],pos[2],"foreground")
-                        if builder_blocks[k] and builder_blocks[k].active and builder_blocks[k].mat then
-                          -- do this later
-                          v.current.active = false
-                          v.current = nil
-                        else
-                          if builder_blocks[k] then
-                            builder_blocks[k].delayUntil = timer+60
-                          end
-                          v.current.tempObjPos = pos
-                          world.placeObject("invisibleproximitysensor",pos,0,{scripts={"/scripts/abyssbuild/abyssplacehelper.lua"},block=v.current,clientEntityMode="clientMasterAllowed"})
-                        end
-                      else
-                        -- object is obstructed... just do this later
-                        v.current.active = false
-                        v.current.delayUntil = timer+30
-                        v.current = nil
-                      end
-                    else
-                      if v.current.colour then
-                        world.setMaterialColor(v.current.pos,v.current.pos[3],v.current.colour)
-                      end
-                      v.current.active = false
-                      v.current = nil
-                    end
-                  elseif world.replaceMaterials and v.current.mat then
-                    animator.setAnimationState(v.part,"green")
-                    world.replaceMaterials({v.current.pos}, v.current.pos[3], v.current.mat, v.current.hue or 0, false)
-                  else
-                    animator.setAnimationState(v.part,"red")
-                    world.damageTiles({v.current.pos}, v.current.pos[3], mePos, "beamish", 1000, 0)
-                  end
-                else
-                  animator.setAnimationState(v.part,"off")
-                  if v.current.colour then
-                    world.setMaterialColor(v.current.pos,v.current.pos[3],v.current.colour)
-                  end
-                  v.current.active = false
-                  v.current = nil
-                end
-              end
-            end
-          end
-          -- draw lines from eye to the square
-          local eoff = vec2.withAngleToRef(vec2.angle(world.distance(eyeTarget, mePos)), math.min(world.magnitude(eyeTarget, mePos)/2, 0.5), vec2working2)
-          local epos = vec2.addToRef(mePos, eoff, vec2working1)
-          local l = world.magnitude(epos,ga)
-          local d = world.distance(ga,epos)
-          local a = vec2.angle(d)
-          local g = getMiscGroup()
-          animator.resetTransformationGroup(g)
-          animator.scaleTransformationGroup(g, {l*8,1})
-          animator.translateTransformationGroup(g,{l/2,0})
-          animator.rotateTransformationGroup(g, a)
-          animator.translateTransformationGroup(g,eoff)
-          l = world.magnitude(epos,gb)
-          d = world.distance(gb,epos)
-          a = vec2.angle(d)
-          g = getMiscGroup()
-          animator.resetTransformationGroup(g)
-          animator.scaleTransformationGroup(g, {l*8,1})
-          animator.translateTransformationGroup(g,{l/2,0})
-          animator.rotateTransformationGroup(g, a)
-          animator.translateTransformationGroup(g,eoff)
-        else
-          animator.setAnimationState("misc", "off")
-          for k,v in next, builder_beams do
-            animator.setAnimationState(v.part,"off")
-            v.current = nil
-          end
-        end
+      builder_update()
     end
   }
   attackFuncs={
@@ -989,9 +640,6 @@ local healerMinions = {
   heal=true
 }
 -- command mode things
-function commandable()
-  return true
-end
 function command_enableBars()
   return true
 end
@@ -1049,8 +697,7 @@ function supportsOrder(t)
   end
   return supportedOrders[t]
 end
-function clearOrders()
-  orders = {}
+function orderChanged()
   overrideTargetPos = nil
   overrideTargetId = nil
   overrideHealId = nil
@@ -1059,167 +706,93 @@ function clearOrders()
   followId = coreId
   maxTargetRangeFromCore = defaultRangeFromCore()
 end
-function order(otype, target, targettype, okind)
-  if supportsOrder(otype) then
-    table.insert(orders, {type=otype, target=target, targettype=targettype, repeating=okind.repeating})
+function updateOrders_execute(current)
+  -- fast movement
+  approachSpeed = 2
+  maxSpeed = 50
+  movementDecel = 0.99
+  maxTargetRangeFromCore = defaultRangeFromCore()
+  local done = false
+  local improveCorners = false
+  local mePos = mcontroller.position()
+  overrideTargetPos = nil
+  overrideTargetId = nil
+  overrideHealId = nil
+  overrideTargetingPos = nil
+  follow = true
+  followId = coreId
+  if current.type == "move" or current.type == "holdposition" then
+    follow = false
+    overrideTargetPos = current.target
+    done = world.magnitude(mePos, current.target) < 1
+    improveCorners = true
+    maxTargetRangeFromCore = 1/0
   end
-end
-function generateLineDrawable(s, t) -- does not fill in all the data
-    return {position={s[1],s[2]},line={{0,0}, world.distance(t, s)}}
-end
-
-function drawOrders(orderTypes, ownerPos)
-  local function worldToLocal(pos)
-    return world.distance(pos, ownerPos)
+  if current.type == "suicide" then
+    status.setResourcePercentage("health",0)
   end
-  local output = {}
-  local lastTargetPosition = entity.position()
-  if #orders >= 2 then
-    if orders[1].repeating then
-      if type(orders[#orders].target) == "table" then
-        lastTargetPosition = orders[#orders].target
-      end
+  if current.type == "killshield" then
+    if status.resourcePositive("shieldHealth") then
+      shieldBreakEffects()
     end
+    status.setResourcePercentage("shieldHealth",0)
+    done = true
   end
-  for k,v in next, orders do
-    if type(v.target) == "table" then
-      -- position target
-      local line = generateLineDrawable(worldToLocal(lastTargetPosition), worldToLocal(v.target))
-      line.color = orderTypes[v.type].lineColour
-      line.width = 1.0
-      line.fullbright = true
-      table.insert(output, line)
-      lastTargetPosition = v.target
-    elseif type(v.target) == "number" then
-      -- entity target
-      if world.entityExists(v.target) then
-        local line = generateLineDrawable(worldToLocal(lastTargetPosition), worldToLocal(world.entityPosition(v.target)))
-        line.color = orderTypes[v.type].lineColour
-        line.width = 1.0
-        line.fullbright = true
-        table.insert(output, line)
-        lastTargetPosition = world.entityPosition(v.target)
-      end
-    else
-      -- no target
-      local poly = {{1,1},{1,-1},{-1,-1},{-1,1}}
-      local pos = worldToLocal(lastTargetPosition)
-      for k,v2 in next, poly do
-        local line = generateLineDrawable(vec2.addToRef(pos, v2, vec2working1), vec2.addToRef(pos, poly[k+1] or poly[1], vec2working2))
-        line.color = orderTypes[v.type].lineColour
-        line.width = 1.0
-        line.fullbright = true
-        table.insert(output, line)
-      end
+  if current.type == "togglepassive" then
+    passiveMode = not passiveMode
+    done = true
+  end
+  if current.type == "attackmove" or current.type == "patrol" then
+    follow = false
+    vec2.copyToRef(current.target, targetPos)
+    done = world.magnitude(mePos, current.target) < 1
+    improveCorners = true
+    maxTargetRangeFromCore = 1/0
+  end
+  if current.type == "guard" then
+    done = not world.entityExists(current.target)
+    if not done then
+      followId = current.target
     end
   end
-  if targetId and world.entityExists(targetId) then
-    local line = generateLineDrawable(worldToLocal(entity.position()), worldToLocal(entityPosition(targetId)))
-    line.color = {255,255,255}
-    line.width = 1.0
-    line.fullbright = true
-    table.insert(output, line)
+  if current.type == "change" then
+    local nexts = {
+      ranged="melee",
+      melee="heal",
+      heal="bomb",
+      bomb="ranged2",
+      ranged2="shield",
+      shield="ranged",
+      sniper="ranged",
+      analysis="analysis",
+      builder="builder"
+    }
+    minionType = nexts[minionType]
+    done = true
   end
-  return {out=output,endPos=lastTargetPosition}
-end
-function updateOrders()
-  local current = orders[1]
-  if current then
-    -- fast movement
-    approachSpeed = 2
-    maxSpeed = 50
-    movementDecel = 0.99
-    maxTargetRangeFromCore = defaultRangeFromCore()
-    local done = false
-    local improveCorners = false
-    local mePos = mcontroller.position()
-    overrideTargetPos = nil
-    overrideTargetId = nil
-    overrideHealId = nil
-    overrideTargetingPos = nil
-    follow = true
-    followId = coreId
-    if current.type == "move" or current.type == "holdposition" then
-      follow = false
-      overrideTargetPos = current.target
-      done = world.magnitude(mePos, current.target) < 1
-      improveCorners = true
-      maxTargetRangeFromCore = 1/0
-    end
-    if current.type == "suicide" then
-      status.setResourcePercentage("health",0)
-    end
-    if current.type == "killshield" then
-      if status.resourcePositive("shieldHealth") then
-        shieldBreakEffects()
-      end
-      status.setResourcePercentage("shieldHealth",0)
-      done = true
-    end
-    if current.type == "togglepassive" then
-      passiveMode = not passiveMode
-      done = true
-    end
-    if current.type == "attackmove" or current.type == "patrol" then
-      follow = false
-      vec2.copyToRef(current.target, targetPos)
-      done = world.magnitude(mePos, current.target) < 1
-      improveCorners = true
-      maxTargetRangeFromCore = 1/0
-    end
-    if current.type == "guard" then
-      done = not world.entityExists(current.target)
-      if not done then
-        followId = current.target
-      end
-    end
-    if current.type == "change" then
-      local nexts = {
-        ranged="melee",
-        melee="heal",
-        heal="bomb",
-        bomb="ranged2",
-        ranged2="shield",
-        shield="ranged",
-        sniper="ranged",
-        analysis="analysis",
-        builder="builder"
-      }
-      minionType = nexts[minionType]
-      done = true
-    end
-    if current.type == "attack" then
-      done = not world.entityExists(current.target)
-      if not done then
-        overrideTargetId = current.target
-      end
-    end
-    if current.type == "attackpos" then
-      if not rotCheck(current.target) then
-        overrideTargetingPos = current.target
-      end
-    end
-    if current.type == "heal" then
-      done = not world.entityExists(current.target)
-      if not done then
-        overrideHealId = current.target
-      end
-    end
-    if done then
-      table.remove(orders, 1)
-      if current.type == "patrol" or current.type == "holdposition" then
-        table.insert(orders, current)
-      end
-      if #orders == 0 then
-        clearOrders()
-      end
-    end
-    if improveCorners then -- move orders only
-      if world.magnitude(mePos, current.target) < 5 then
-        movementDecel = 0.9
-      end
+  if current.type == "attack" then
+    done = not world.entityExists(current.target)
+    if not done then
+      overrideTargetId = current.target
     end
   end
+  if current.type == "attackpos" then
+    if not rotCheck(current.target) then
+      overrideTargetingPos = current.target
+    end
+  end
+  if current.type == "heal" then
+    done = not world.entityExists(current.target)
+    if not done then
+      overrideHealId = current.target
+    end
+  end
+  if improveCorners then -- move orders only
+    if world.magnitude(mePos, current.target) < 5 then
+      movementDecel = 0.9
+    end
+  end
+  return done
 end
 function updateAnchorPos(n)
   anchorPos = n

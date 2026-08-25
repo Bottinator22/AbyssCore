@@ -28,7 +28,6 @@ function module.isBindHeld(args)
 end
 function module.init()
     modules.addPressCommand("/explode",module)
-    radarInit()
 end
 function module.isActive()
     return false

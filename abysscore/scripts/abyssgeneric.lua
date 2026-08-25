@@ -35,6 +35,7 @@ local spawnableMinionTypes = {
 }
 
 local sineTest
+local lastRenderLayerOverride
 
 local function heldItem()
     local swap = player.swapSlotItem()
@@ -59,6 +60,9 @@ function init()
     if not threads then
         script.setUpdateDelta(0)
         return
+    end
+    if player.getProperty("abyss_defaultEmote") then
+        heldEmote = player.getProperty("abyss_defaultEmote")
     end
     utilThread = threads.create({
         name="abyss_utilThread",
@@ -226,6 +230,59 @@ function init()
             return "Invalid personality index"
         end
     end)
+    message.setHandler("/abyssRenderLayer", function(_,l,c) 
+        if not l then
+            return "Unauthorized"
+        end
+        if not player.setRenderLayer then
+            return "Your oSB is not new enough."
+        end
+        if #c <= 0 then
+            lastRenderLayerOverride = nil
+            player.setRenderLayer()
+        else
+            if pcall(player.setRenderLayer,c) then -- pcall so chat isn't flooded in case of an error
+                lastRenderLayerOverride = c
+            end
+        end
+    end)
+    message.setHandler("abyss_renderLayerOverride", function(_,l,p) 
+        if not l then
+            return "Unauthorized"
+        end
+        if p and lastRenderLayerOverride then
+            -- parse it
+            local offIndex = string.find(lastRenderLayerOverride,"+")
+            local off = 0
+            local offMult = 1
+            local baseLayer
+            if not offIndex then
+                offIndex = string.find(lastRenderLayerOverride,"-")
+                offMult = -1
+            end
+            if offIndex then
+                baseLayer = string.sub(lastRenderLayerOverride,1,offIndex-1)
+                off = tonumber(string.sub(lastRenderLayerOverride,offIndex+1,-1))*offMult
+            else
+                baseLayer = lastRenderLayerOverride
+            end
+            return {baseLayer,off}
+        else
+            return lastRenderLayerOverride
+        end
+    end)
+    message.setHandler("/aswap", function(_,l,c) 
+        if not l then
+            return "Unauthorized"
+        end
+        -- TODO: search aliases for fast swapping
+        local aliases = root.assetJson("/abyssswapaliases.config")
+        if aliases[c] then
+            return chat.command(string.format("/swap %s",aliases[c]))
+        else
+            return "No alias of that name."
+        end
+    end)
     initConfigKeyCommands()
     
     local function validateUuid(uid)
@@ -261,6 +318,18 @@ function init()
         orbitedworld=parameterlessWarp,
         player=uidWarp,
         clientshipworld=uidWarp,
+        customworld=universe and function(split)
+            if #split < 2 then
+                return false
+            end
+            return true
+        end,
+        clientcustomworld=universe and function(split)
+            if #split < 3 then
+                return false
+            end
+            return validateUuid(split[2])
+        end,
         celestialworld=function(split)
             if #split < 5 then
                 return false
@@ -458,4 +527,9 @@ function postUpdate()
     end
     -- TODO: send more than one of these messages, optionally
     world.sendEntityMessage(player.id(),"abyss_postUpdate")
+end
+function uninit()
+    if lastRenderLayerOverride then
+        player.setRenderLayer()
+    end
 end

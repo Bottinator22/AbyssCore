@@ -1,0 +1,129 @@
+{
+    "isExpanded": true,
+    "animationCustom":{
+        "animatedParts":{
+            "stateTypes" : {
+                "misc" : {
+                    "priority" : 5,
+                    "default" : "off",
+                    "states" : {
+                        "off" : {},
+                        "deepblue" : {}
+                    }
+                }
+            },
+            "parts":{
+                "misc1": {
+                    "properties" : {
+                        "fullbright": true,
+                        "zLevel" : 35,
+                        "transformationGroups" : [ "misc1" ],
+                        "offset" : [0.0, 0.0]
+                    },
+                    "partStates": {
+                        "misc": {
+                            "deepblue": {
+                                "properties": {
+                                    "image": "/particles/ash/3.png?setcolor=0000ff"
+                                }
+                            }
+                        }
+                    }
+                },
+                "misc2": {
+                    "properties" : {
+                        "fullbright": true,
+                        "zLevel" : 35,
+                        "transformationGroups" : [ "misc2" ],
+                        "offset" : [0.0, 0.0]
+                    },
+                    "partStates": {
+                        "misc": {
+                            "deepblue": {
+                                "properties": {
+                                    "image": "/particles/ash/3.png?setcolor=0000ff"
+                                }
+                            }
+                        }
+                    }
+                },
+                "misc3": {
+                    "properties" : {
+                        "fullbright": true,
+                        "zLevel" : 35,
+                        "transformationGroups" : [ "misc3" ],
+                        "offset" : [0.0, 0.0]
+                    },
+                    "partStates": {
+                        "misc": {
+                            "deepblue": {
+                                "properties": {
+                                    "image": "/particles/ash/3.png?setcolor=0000ff"
+                                }
+                            }
+                        }
+                    }
+                },
+                "misc4": {
+                    "properties" : {
+                        "fullbright": true,
+                        "zLevel" : 35,
+                        "transformationGroups" : [ "misc4" ],
+                        "offset" : [0.0, 0.0]
+                    },
+                    "partStates": {
+                        "misc": {
+                            "deepblue": {
+                                "properties": {
+                                    "image": "/particles/ash/3.png?setcolor=0000ff"
+                                }
+                            }
+                        }
+                    }
+                },
+                "misc5": {
+                    "properties" : {
+                        "fullbright": true,
+                        "zLevel" : 35,
+                        "transformationGroups" : [ "misc5" ],
+                        "offset" : [0.0, 0.0]
+                    },
+                    "partStates": {
+                        "misc": {
+                            "deepblue": {
+                                "properties": {
+                                    "image": "/particles/ash/3.png?setcolor=0000ff"
+                                }
+                            }
+                        }
+                    }
+                },
+                "misc6": {
+                    "properties" : {
+                        "fullbright": true,
+                        "zLevel" : 35,
+                        "transformationGroups" : [ "misc6" ],
+                        "offset" : [0.0, 0.0]
+                    },
+                    "partStates": {
+                        "misc": {
+                            "deepblue": {
+                                "properties": {
+                                    "image": "/particles/ash/3.png?setcolor=0000ff"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "transformationGroups" : {
+            "misc1" : { "interpolated" : false },
+            "misc2" : { "interpolated" : false },
+            "misc3" : { "interpolated" : false },
+            "misc4" : { "interpolated" : false },
+            "misc5" : { "interpolated" : false },
+            "misc6" : { "interpolated" : false }
+        }
+    }
+} 

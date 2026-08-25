@@ -1,4 +1,6 @@
 {
+    "type" : "abyss_basic",
+    
     "scripts": [
       "/scripts/abyssbasicstagehand.lua"
     ],

@@ -118,6 +118,7 @@ function modules.addPressCommand(c,m)
     end)
 end
 modules.enableModule = enableModule
+modules.disableModule = disableModule
 function modules.tryEnableModule(m)
     -- check if it overlaps an existing, active module, enable it if it does, do nothing if it doesn't
     if m.passive then

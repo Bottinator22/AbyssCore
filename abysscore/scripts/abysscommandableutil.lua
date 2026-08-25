@@ -1,6 +1,10 @@
 require "/scripts/terra_vec2ref.lua"
+require "/scripts/abyssutil.lua"
+require "/scripts/abyssrenderutil.lua"
 
 -- make sure to call updateOrders in your update
+
+-- entity targets can optionally use targetTracker instead of target, which will track unique entity targets even if they are unloaded
 
 local vec2working1 = {0,0}
 local vec2working2 = {0,0}
@@ -139,11 +143,11 @@ function order(order, okind)
     if #orders == 0 then
       orderChanged(order)
     end
+    if order.targettype == "entity" and not order.targetTracker and world.entityExists(order.target) then
+      order.targetTracker = entityTracker(order.target)
+    end
     table.insert(orders, order)
   end
-end
-function generateLineDrawable(s, t) -- does not fill in all the data
-    return {position={s[1],s[2]},line={{0,0}, world.distance(t, s)}}
 end
 function drawOrders(orderTypes, ownerPos)
   local function worldToLocal(pos)
@@ -169,13 +173,14 @@ function drawOrders(orderTypes, ownerPos)
       lastTargetPosition = v.target
     elseif v.targettype == "entity" then
       -- entity target
-      if world.entityExists(v.target) then
-        local line = generateLineDrawable(worldToLocal(lastTargetPosition), worldToLocal(world.entityPosition(v.target)))
+      if v.targetTracker and v.targetTracker:exists() then
+        local pos = v.targetTracker:position()
+        local line = generateLineDrawable(worldToLocal(lastTargetPosition), worldToLocal(pos))
         line.color = orderTypes[v.type].lineColour
         line.width = 1.0
         line.fullbright = true
         table.insert(output, line)
-        lastTargetPosition = world.entityPosition(v.target)
+        lastTargetPosition = pos
       end
     elseif v.targettype == "rect" then
       -- rect target

@@ -15,8 +15,7 @@ local function setEnabled(mode)
     local exists = stagehandExists()
     if mode and not exists then
         if world.entity then
-            local params = root.assetJson("/scripts/abyssBasicStagehandParams.json")
-            freecamStagehand = world.spawnStagehand(mcontroller.position(),"mailbox",params)
+            freecamStagehand = world.spawnStagehand(mcontroller.position(),"abyss_basic")
             player.setCameraFocusEntity(freecamStagehand)
         end
     elseif exists then
@@ -27,7 +26,60 @@ function module.isBindHeld(args)
     return safeBindHeld("abysscore","toggleFreecam")
 end
 function module.init()
-    modules.addPressCommand("/freecam",module)
+    if radarFindPlayer then
+        message.setHandler("/freecam",function(_,l,c)
+            if not l then return "no" end
+            local split = {}
+            for v in string.gmatch(c,"([^ ]+)") do
+                table.insert(split, v)
+            end
+            if #split <= 0 then
+                modules.enableModule(module)
+                modules.pressModule(module)
+                return
+            end
+            local targetPos = nil
+            local i = split[2]
+            if split[1] == "self" then
+                targetPos = mcontroller.position()
+            elseif split[1] == "interest" then
+                if not i then
+                    return "Need an interest."
+                end
+                local interest = radarInterests[i]
+                if not interest then
+                    return "Can't find an interest of that name."
+                end
+                if interest[3] ~= player.worldId() then
+                    return "That interest isn't on-world."
+                end
+                targetPos = interest
+            elseif split[1] == "player" then
+                if not i then
+                    return "Need a player."
+                end
+                local p = radarFindPlayer(i)
+                if not p then
+                    return "Couldn't find any players of that name."
+                end
+                if type(p) == "number" then
+                    return string.format("There are %d players that fit that name.",p)
+                end
+                targetPos = p.pos
+            else
+                return "Not a valid focus type."
+            end
+            if targetPos then
+                if not stagehandExists() then
+                    modules.enableModule(module)
+                    setEnabled(true)
+                end
+                world.callScriptedEntity(freecamStagehand,"stagehand.setPosition",targetPos)
+            end
+        end)
+    else
+        modules.addPressCommand("/freecam",module)
+    end
 end
 function module.enable()
 end

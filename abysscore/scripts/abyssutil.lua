@@ -12,12 +12,22 @@ local function pathFName(p)
     end
     return out
 end
+local lastEmoteIndex
 function getActiveEmote(e)
     -- idk if I'll ever use this. it's there, ig
     local portrait = world.entityPortrait(e or entity.id(),"head")
+    if lastEmoteIndex then
+        local fname = pathFName(imagePath(portrait[lastEmoteIndex].image))
+        if string.match(fname,"([^:]*)") == "emote.png" then
+            return string.sub(fname,string.find(fname,":")+1,#fname)
+        else
+            lastEmoteIndex = nil
+        end
+    end
     for k,v in next, portrait do
         local fname = pathFName(imagePath(v.image))
         if string.match(fname,"([^:]*)") == "emote.png" then
+            lastEmoteIndex = k
             return string.sub(fname,string.find(fname,":")+1,#fname)
         end
     end
@@ -33,6 +43,63 @@ function ensureBasicProxies()
     end
     return not not (player or localAnimator)
 end
+
+local entityTrackerMT = {
+    __index={
+        exists=function(t) 
+            t:update() 
+            return (t.id and world.entityExists(t.id)) or (t.uid and t.found)
+        end,
+        position=function(t)
+            t:update()
+            return t.lastSeenPos
+        end,
+        update=function(t)
+            if t.id and world.entityExists(t.id) then
+                t.promise = nil
+                t.found = true
+                t.lastSeenPos = world.entityPosition(t.id)
+            elseif t.uid then
+                if not t.promise then
+                    -- local master entities will resolve this instantly
+                    -- ...though local master entities also won't start re-existing
+                    t.promise = world.findUniqueEntity(t.uid)
+                end
+                if t.promise then
+                    if t.promise:finished() then
+                        t.found = t.promise:succeeded()
+                        if t.found then
+                            t.lastSeenPos = t.promise:result()
+                            
+                            -- try and relocate the entity in case it's loaded
+                            local es = world.entityQuery(t.lastSeenPos,10,{includedTypes={t.type}})
+                            for k,v in next, es do
+                                if world.entityUniqueId(v) == t.uid then
+                                    t.id = v
+                                    break
+                                end
+                            end
+                        end
+                        t.promise = nil
+                    end
+                end
+            end
+        end
+    }
+}
+function entityTracker(e)
+    local out = {
+        id=e,
+        found=true,
+        type=world.entityType(e),
+        lastSeenPos=world.entityPosition(e),
+        promise=nil,
+        uid=world.entityUniqueId(e)
+    }
+    setmetatable(out,entityTrackerMT)
+    return out
+end
+
 function calculateEntitySize(e, mode)
     -- uses queries to figure out an entity's size as a rect
     -- unnecessary if world.entity is present, since that can be used to get it directly

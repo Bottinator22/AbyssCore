@@ -3,6 +3,7 @@ require "/scripts/terra_vec3.lua"
 require "/scripts/terra_renderutil.lua"
 require "/scripts/terra_proxy.lua"
 require "/scripts/poly.lua"
+require "/scripts/abyssutil.lua"
 
 -- RTS-like command interface.
 -- The key to toggle, providing of controls, and disabling of controls/tool usage should be handled by whatever tech uses this.
@@ -130,7 +131,11 @@ function executeSendOrder(e,order,target,targettype)
             if not ver then
                 world.callScriptedEntity(v, "order",order,target,targettype,okind)
             else
-                world.callScriptedEntity(v, "order",{type=order,target=target,targettype=targettype,repeating=okind.repeating,mode=currentOrderMode},okind)
+                local tr = nil
+                if targettype == "entity" and world.entityExists(target) then
+                    tr = entityTracker(target)
+                end
+                world.callScriptedEntity(v, "order",{type=order,target=target,targettype=targettype,repeating=okind.repeating,mode=currentOrderMode,targetTracker=tr},okind)
             end
         end
     end

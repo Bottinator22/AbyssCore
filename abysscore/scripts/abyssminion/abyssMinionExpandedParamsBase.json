@@ -1,0 +1,41 @@
+ 
+{
+    "beamStateType": {
+        "priority" : 5,
+        "default" : "off",
+        "states" : {
+            "off" : {},
+            "red" : {},
+            "green" : {},
+            "deepblue": {}
+        }
+    },
+    "beamTransformationGroup": { "interpolated" : false },
+    "beamPart": {
+        "properties" : {
+            "fullbright": true,
+            "zLevel" : 40,
+            "transformationGroups" : [ "laser%.0f", "body", "eye" ],
+            "offset" : [0.0, 0.0]
+        },
+        "partStates": {
+        }
+    },
+    "beamPartStates": {
+        "red": {
+            "properties": {
+                "image": "/particles/ash/3.png?setcolor=ff0000"
+            }
+        },
+        "green": {
+            "properties": {
+                "image": "/particles/ash/3.png?setcolor=00ff00"
+            }
+        },
+        "deepblue": {
+            "properties": {
+                "image": "/particles/ash/3.png?setcolor=0000ff"
+            }
+        }
+    }
+}
